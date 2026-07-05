@@ -49,3 +49,6 @@ app.*.map.json
 
 # local.properties contains machine-specific SDK paths
 android/local.properties
+
+# Golden test failure diffs
+test/failures/

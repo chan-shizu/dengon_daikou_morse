@@ -18,11 +18,25 @@ class SendScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             TextField(
+              enabled: !state.isSending,
               decoration: const InputDecoration(
                 labelText: '日本語テキスト',
                 border: OutlineInputBorder(),
               ),
               onChanged: vm.updateInput,
+            ),
+            const SizedBox(height: 16),
+            _SpeedSlider(
+              unitMs: state.unitMs,
+              enabled: !state.isSending,
+              onChanged: (ms) => vm.setUnitMs(ms),
+            ),
+            const SizedBox(height: 12),
+            _SendButton(
+              isSending: state.isSending,
+              canSend: state.inputText.isNotEmpty,
+              onStart: () => vm.startSending(),
+              onStop: vm.stopSending,
             ),
             const SizedBox(height: 24),
             const Text('変換結果', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -35,6 +49,68 @@ class SendScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SpeedSlider extends StatelessWidget {
+  const _SpeedSlider({
+    required this.unitMs,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final int unitMs;
+  final bool enabled;
+  final void Function(int ms) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text('速度: ${unitMs}ms', style: Theme.of(context).textTheme.bodyMedium),
+        Expanded(
+          child: Slider(
+            min: 50,
+            max: 500,
+            divisions: 45,
+            value: unitMs.toDouble(),
+            onChanged: enabled ? (v) => onChanged(v.round()) : null,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  const _SendButton({
+    required this.isSending,
+    required this.canSend,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final bool isSending;
+  final bool canSend;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: isSending ? onStop : (canSend ? onStart : null),
+        style: isSending
+            ? ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              )
+            : null,
+        icon: Icon(isSending ? Icons.stop : Icons.flash_on),
+        label: Text(isSending ? '停止' : '送信'),
       ),
     );
   }
@@ -87,7 +163,9 @@ class _MorseChip extends StatelessWidget {
         Text(
           code ?? '?',
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: code != null ? theme.colorScheme.primary : theme.colorScheme.error,
+            color: code != null
+                ? theme.colorScheme.primary
+                : theme.colorScheme.error,
           ),
         ),
       ],
