@@ -6,9 +6,13 @@ const _unitMs = 200;
 
 /// テキストを送信仕様どおりの SignalEvent 列に変換する
 /// （点=1・線=3単位ON、記号間=1・文字間=3・単語間=7単位OFF）
-List<SignalEvent> _encodeToEvents(String text, {int unitMs = _unitMs}) {
+List<SignalEvent> _encodeToEvents(
+  String text, {
+  int unitMs = _unitMs,
+  MorseLanguage language = MorseLanguage.japanese,
+}) {
   final events = <SignalEvent>[];
-  final codes = MorseEncoder.encode(text);
+  final codes = MorseEncoder.encode(text, language: language);
   final chars = text.split('');
 
   var offMs = unitMs * 100; // 送信開始前の長い暗闇
@@ -49,7 +53,10 @@ void main() {
 
     test('英文と共通の符号は和文（カタカナ）として復元される', () {
       // S(...)=ラ、O(---)=レ。逆引きは和文優先
-      expect(_decode(_encodeToEvents('SOS')), 'ラレラ');
+      expect(
+        _decode(_encodeToEvents('SOS', language: MorseLanguage.english)),
+        'ラレラ',
+      );
     });
 
     test('単語間スペースを復元できる', () {

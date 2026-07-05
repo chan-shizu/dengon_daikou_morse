@@ -41,7 +41,8 @@ void main() {
     testWidgets('変換不能文字を含む入力', (tester) async {
       await _pumpApp(tester, const ProviderScope(child: App()));
 
-      await tester.enterText(find.byType(TextField), 'SOS！');
+      // 「ョ」は和文モールス表にないため ? になる
+      await tester.enterText(find.byType(TextField), 'きょう');
       await tester.pumpAndSettle();
 
       await expectLater(

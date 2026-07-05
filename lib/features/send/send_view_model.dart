@@ -28,6 +28,7 @@ class SendState {
     this.unitMs = kDefaultUnitMs,
     this.sendingCharIndex,
     this.mode = SendMode.light,
+    this.language = MorseLanguage.japanese,
   });
 
   final String inputText;
@@ -38,6 +39,7 @@ class SendState {
   // 送信中の文字のインデックス（送信中以外は null）
   final int? sendingCharIndex;
   final SendMode mode;
+  final MorseLanguage language;
 
   SendState copyWith({
     String? inputText,
@@ -46,6 +48,7 @@ class SendState {
     int? unitMs,
     int? sendingCharIndex,
     SendMode? mode,
+    MorseLanguage? language,
   }) {
     return SendState(
       inputText: inputText ?? this.inputText,
@@ -55,6 +58,7 @@ class SendState {
       // 送信位置は毎回明示的に渡す（送信終了時に null へ戻すため）
       sendingCharIndex: sendingCharIndex,
       mode: mode ?? this.mode,
+      language: language ?? this.language,
     );
   }
 }
@@ -73,7 +77,7 @@ class SendViewModel extends _$SendViewModel {
   void updateInput(String text) {
     state = state.copyWith(
       inputText: text,
-      morseSequence: MorseEncoder.encode(text),
+      morseSequence: MorseEncoder.encode(text, language: state.language),
     );
   }
 
@@ -83,6 +87,16 @@ class SendViewModel extends _$SendViewModel {
 
   void setMode(SendMode mode) {
     state = state.copyWith(mode: mode);
+  }
+
+  void setLanguage(MorseLanguage language) {
+    // 入力済みテキストから新しい言語で入力できない文字を除き、変換し直す
+    final filtered = language.filterText(state.inputText);
+    state = state.copyWith(
+      language: language,
+      inputText: filtered,
+      morseSequence: MorseEncoder.encode(filtered, language: language),
+    );
   }
 
   Future<void> startSending() async {

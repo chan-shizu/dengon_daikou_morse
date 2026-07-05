@@ -1,7 +1,8 @@
-// 和文モールス符号表（benricho.org / ITU-R M.1677 準拠）
+// モールス符号表（benricho.org / ITU-R M.1677 準拠）
 // '.' = 点（dit）、'-' = 線（dah）
-const Map<String, String> kMorseTable = {
-  // 数字
+
+// 数字・記号（和文/英文共通）
+const Map<String, String> kDigitSymbolMorseTable = {
   '1': '.----',
   '2': '..---',
   '3': '...--',
@@ -13,7 +14,13 @@ const Map<String, String> kMorseTable = {
   '9': '----.',
   '0': '-----',
 
-  // アルファベット（英文モールス）
+  '.': '.-.-.-',
+  ',': '--..--',
+  '?': '..--..',
+};
+
+// アルファベット（英文モールス）
+const Map<String, String> kAlphabetMorseTable = {
   'A': '.-',
   'B': '-...',
   'C': '-.-.',
@@ -40,8 +47,10 @@ const Map<String, String> kMorseTable = {
   'X': '-..-',
   'Y': '-.--',
   'Z': '--..',
+};
 
-  // 和文モールス符号（カタカナ）
+// 和文モールス符号（カタカナ）
+const Map<String, String> kKanaMorseTable = {
   'ア': '--.--',
   'イ': '.-',
   'ウ': '..-',
@@ -93,12 +102,23 @@ const Map<String, String> kMorseTable = {
   'ー': '.--.-', // 長音符
 
   '゛': '..', // 濁点
-  '゜': '..--.',  // 半濁点
+  '゜': '..--.', // 半濁点
+};
 
-  // 記号
-  '.': '.-.-.-',
-  ',': '--..--',
-  '?': '..--..',
+// 送信用（言語別）
+const Map<String, String> kJapaneseMorseTable = {
+  ...kDigitSymbolMorseTable,
+  ...kKanaMorseTable,
+};
+const Map<String, String> kEnglishMorseTable = {
+  ...kDigitSymbolMorseTable,
+  ...kAlphabetMorseTable,
+};
+
+// 受信のデコード用統合表（符号が衝突する場合は和文が優先される）
+const Map<String, String> kMorseTable = {
+  ...kEnglishMorseTable,
+  ...kKanaMorseTable,
 };
 
 // 逆引き用（モールス → 文字）
