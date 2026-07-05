@@ -46,6 +46,7 @@ class SendScreen extends ConsumerWidget {
               child: _MorseResultView(
                 inputText: state.inputText,
                 morseSequence: state.morseSequence,
+                sendingCharIndex: state.sendingCharIndex,
               ),
             ),
           ],
@@ -121,10 +122,12 @@ class _MorseResultView extends StatelessWidget {
   const _MorseResultView({
     required this.inputText,
     required this.morseSequence,
+    required this.sendingCharIndex,
   });
 
   final String inputText;
   final List<String?> morseSequence;
+  final int? sendingCharIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +144,11 @@ class _MorseResultView extends StatelessWidget {
         runSpacing: 8,
         children: [
           for (var i = 0; i < chars.length; i++)
-            _MorseChip(char: chars[i], code: morseSequence[i]),
+            _MorseChip(
+              char: chars[i],
+              code: morseSequence[i],
+              isSending: i == sendingCharIndex,
+            ),
         ],
       ),
     );
@@ -149,27 +156,39 @@ class _MorseResultView extends StatelessWidget {
 }
 
 class _MorseChip extends StatelessWidget {
-  const _MorseChip({required this.char, required this.code});
+  const _MorseChip({
+    required this.char,
+    required this.code,
+    required this.isSending,
+  });
 
   final String char;
   final String? code;
+  final bool isSending;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(char, style: theme.textTheme.titleMedium),
-        Text(
-          code ?? '?',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: code != null
-                ? theme.colorScheme.primary
-                : theme.colorScheme.error,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: isSending ? theme.colorScheme.primaryContainer : null,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(char, style: theme.textTheme.titleMedium),
+          Text(
+            code ?? '?',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: code != null
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.error,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

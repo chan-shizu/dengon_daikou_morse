@@ -12,6 +12,7 @@ class SendState {
     this.morseSequence = const [],
     this.isSending = false,
     this.unitMs = kDefaultUnitMs,
+    this.sendingCharIndex,
   });
 
   final String inputText;
@@ -19,17 +20,23 @@ class SendState {
   final bool isSending;
   final int unitMs;
 
+  // 送信中の文字のインデックス（送信中以外は null）
+  final int? sendingCharIndex;
+
   SendState copyWith({
     String? inputText,
     List<String?>? morseSequence,
     bool? isSending,
     int? unitMs,
+    int? sendingCharIndex,
   }) {
     return SendState(
       inputText: inputText ?? this.inputText,
       morseSequence: morseSequence ?? this.morseSequence,
       isSending: isSending ?? this.isSending,
       unitMs: unitMs ?? this.unitMs,
+      // 送信位置は毎回明示的に渡す（送信終了時に null へ戻すため）
+      sendingCharIndex: sendingCharIndex,
     );
   }
 }
@@ -108,6 +115,8 @@ class SendViewModel extends _$SendViewModel {
       }
       isFirst = false;
       prevWasSpace = false;
+
+      state = state.copyWith(sendingCharIndex: i);
 
       for (int j = 0; j < code.length; j++) {
         if (_cancelled) break;
