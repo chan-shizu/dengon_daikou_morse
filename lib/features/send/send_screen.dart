@@ -32,6 +32,12 @@ class SendScreen extends ConsumerWidget {
               enabled: !state.isSending,
               onChanged: (ms) => vm.setUnitMs(ms),
             ),
+            const SizedBox(height: 8),
+            _ModeSelector(
+              mode: state.mode,
+              enabled: !state.isSending,
+              onChanged: (mode) => vm.setMode(mode),
+            ),
             const SizedBox(height: 12),
             _SendButton(
               isSending: state.isSending,
@@ -82,6 +88,31 @@ class _SpeedSlider extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ModeSelector extends StatelessWidget {
+  const _ModeSelector({
+    required this.mode,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final SendMode mode;
+  final bool enabled;
+  final void Function(SendMode mode) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<SendMode>(
+      segments: [
+        for (final m in SendMode.values)
+          ButtonSegment(value: m, label: Text(m.label)),
+      ],
+      selected: {mode},
+      onSelectionChanged:
+          enabled ? (selection) => onChanged(selection.first) : null,
     );
   }
 }

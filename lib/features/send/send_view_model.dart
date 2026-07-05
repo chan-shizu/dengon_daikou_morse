@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -6,6 +7,19 @@ import '../../core/morse/morse_encoder.dart';
 
 part 'send_view_model.g.dart';
 
+enum SendMode {
+  light('光'),
+  sound('音'),
+  both('光+音');
+
+  const SendMode(this.label);
+
+  final String label;
+
+  bool get usesLight => this != SendMode.sound;
+  bool get usesSound => this != SendMode.light;
+}
+
 class SendState {
   const SendState({
     this.inputText = '',
@@ -13,6 +27,7 @@ class SendState {
     this.isSending = false,
     this.unitMs = kDefaultUnitMs,
     this.sendingCharIndex,
+    this.mode = SendMode.light,
   });
 
   final String inputText;
@@ -22,6 +37,7 @@ class SendState {
 
   // 送信中の文字のインデックス（送信中以外は null）
   final int? sendingCharIndex;
+  final SendMode mode;
 
   SendState copyWith({
     String? inputText,
@@ -29,6 +45,7 @@ class SendState {
     bool? isSending,
     int? unitMs,
     int? sendingCharIndex,
+    SendMode? mode,
   }) {
     return SendState(
       inputText: inputText ?? this.inputText,
@@ -37,6 +54,7 @@ class SendState {
       unitMs: unitMs ?? this.unitMs,
       // 送信位置は毎回明示的に渡す（送信終了時に null へ戻すため）
       sendingCharIndex: sendingCharIndex,
+      mode: mode ?? this.mode,
     );
   }
 }
@@ -44,9 +62,13 @@ class SendState {
 @riverpod
 class SendViewModel extends _$SendViewModel {
   bool _cancelled = false;
+  AudioPlayer? _player;
 
   @override
-  SendState build() => const SendState();
+  SendState build() {
+    ref.onDispose(() => _player?.dispose());
+    return const SendState();
+  }
 
   void updateInput(String text) {
     state = state.copyWith(
@@ -59,6 +81,10 @@ class SendViewModel extends _$SendViewModel {
     state = state.copyWith(unitMs: ms);
   }
 
+  void setMode(SendMode mode) {
+    state = state.copyWith(mode: mode);
+  }
+
   Future<void> startSending() async {
     if (state.isSending || state.inputText.isEmpty) return;
     _cancelled = false;
@@ -66,12 +92,18 @@ class SendViewModel extends _$SendViewModel {
 
     try {
       await WakelockPlus.enable();
-      await _flashMorse();
+      if (state.mode.usesSound) {
+        await _preparePlayer();
+      }
+      await _sendMorse();
     } catch (_) {
       // シミュレータ等でライトが使えない場合は無視
     } finally {
       try {
         await TorchLight.disableTorch();
+      } catch (_) {}
+      try {
+        await _player?.pause();
       } catch (_) {}
       try {
         await WakelockPlus.disable();
@@ -84,10 +116,30 @@ class SendViewModel extends _$SendViewModel {
     _cancelled = true;
   }
 
-  Future<void> _flashMorse() async {
+  // ループ再生するトーンを準備しておき、ON/OFF は resume/pause で切り替える
+  Future<void> _preparePlayer() async {
+    if (_player != null) return;
+    final player = AudioPlayer();
+    await player.setReleaseMode(ReleaseMode.loop);
+    await player.setSource(AssetSource('sounds/tone.wav'));
+    _player = player;
+  }
+
+  Future<void> _signalOn(SendMode mode) async {
+    if (mode.usesLight) await TorchLight.enableTorch();
+    if (mode.usesSound) await _player?.resume();
+  }
+
+  Future<void> _signalOff(SendMode mode) async {
+    if (mode.usesLight) await TorchLight.disableTorch();
+    if (mode.usesSound) await _player?.pause();
+  }
+
+  Future<void> _sendMorse() async {
     final text = state.inputText;
     final sequence = state.morseSequence;
     final unitMs = state.unitMs;
+    final mode = state.mode;
     final chars = text.split('');
 
     bool isFirst = true;
@@ -122,9 +174,9 @@ class SendViewModel extends _$SendViewModel {
         if (_cancelled) break;
 
         final onMs = (code[j] == '.' ? 1 : 3) * unitMs;
-        await TorchLight.enableTorch();
+        await _signalOn(mode);
         await _sleep(onMs);
-        await TorchLight.disableTorch();
+        await _signalOff(mode);
 
         if (_cancelled) break;
 
