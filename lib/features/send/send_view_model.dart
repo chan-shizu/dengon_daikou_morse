@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../../core/constants.dart';
 import '../../core/morse/morse_encoder.dart';
 
 part 'send_view_model.g.dart';
@@ -10,7 +11,7 @@ class SendState {
     this.inputText = '',
     this.morseSequence = const [],
     this.isSending = false,
-    this.unitMs = 200,
+    this.unitMs = kDefaultUnitMs,
   });
 
   final String inputText;

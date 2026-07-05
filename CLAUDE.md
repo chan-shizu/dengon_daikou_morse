@@ -141,10 +141,11 @@ flutter test     # テスト実行
 
 ## 実装進捗
 
-- [ ] pubspec.yaml にパッケージ追加
-- [ ] Android / iOS 権限設定
-- [ ] 和文モールス変換表（`morse_table.dart`）
-- [ ] モールスエンコーダー（`morse_encoder.dart`）
-- [ ] 送信ViewModel / 送信UI
-- [ ] モールスデコーダー（`morse_decoder.dart`）
-- [ ] 受信ViewModel / 受信UI
+- [x] pubspec.yaml にパッケージ追加
+- [x] Android / iOS 権限設定
+- [x] 和文モールス変換表（`morse_table.dart`）
+- [x] モールスエンコーダー（`morse_encoder.dart`）
+- [x] 送信ViewModel / 送信UI
+- [x] モールスデコーダー（`morse_decoder.dart`）
+- [x] 受信ViewModel / 受信UI
+- [ ] 実機2台での送受信テスト（閾値・ROI調整）

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants.dart';
 import 'send_view_model.dart';
 
 class SendScreen extends ConsumerWidget {
@@ -72,9 +73,9 @@ class _SpeedSlider extends StatelessWidget {
         Text('速度: ${unitMs}ms', style: Theme.of(context).textTheme.bodyMedium),
         Expanded(
           child: Slider(
-            min: 50,
-            max: 500,
-            divisions: 45,
+            min: kMinUnitMs.toDouble(),
+            max: kMaxUnitMs.toDouble(),
+            divisions: (kMaxUnitMs - kMinUnitMs) ~/ 10,
             value: unitMs.toDouble(),
             onChanged: enabled ? (v) => onChanged(v.round()) : null,
           ),

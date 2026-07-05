@@ -1,4 +1,5 @@
 import 'package:dengon_daikou_morse/app.dart';
+import 'package:dengon_daikou_morse/features/receive/receive_screen.dart';
 import 'package:dengon_daikou_morse/features/send/send_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,6 +47,20 @@ void main() {
       await expectLater(
         find.byType(SendScreen),
         matchesGoldenFile('goldens/send_screen_with_unknown_char.png'),
+      );
+    });
+  });
+
+  group('ReceiveScreen golden', () {
+    testWidgets('停止状態', (tester) async {
+      await _pumpApp(tester, const ProviderScope(child: App()));
+
+      await tester.tap(find.text('受信'));
+      await tester.pumpAndSettle();
+
+      await expectLater(
+        find.byType(ReceiveScreen),
+        matchesGoldenFile('goldens/receive_screen_idle.png'),
       );
     });
   });

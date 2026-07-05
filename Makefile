@@ -9,6 +9,9 @@ ipad-device:
 android:
 	flutter run -d android
 
+android-device:
+	flutter run -d 00156254L000166
+
 gen:
 	dart run build_runner build
 
