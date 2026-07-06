@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../core/constants.dart';
 import '../../core/morse/morse_decoder.dart';
+import '../../core/morse/morse_encoder.dart';
 
 part 'receive_view_model.g.dart';
 
@@ -13,7 +14,9 @@ class ReceiveState {
     this.isReceiving = false,
     this.decodedText = '',
     this.currentSymbols = '',
-    this.unitMs = kDefaultUnitMs,
+    this.phase = ReceivePhase.waitingSignal,
+    this.language,
+    this.detectedUnitMs,
     this.isLightDetected = false,
     this.errorMessage,
   });
@@ -23,7 +26,16 @@ class ReceiveState {
 
   // 確定前のモールス符号バッファ
   final String currentSymbols;
-  final int unitMs;
+
+  // プロトコルの進行フェーズ
+  final ReceivePhase phase;
+
+  // ヘッダーの言語符号で確定した言語（確定前は null）
+  final MorseLanguage? language;
+
+  // プリアンブルから自動検出した単位時間（検出前は null）
+  final int? detectedUnitMs;
+
   final bool isLightDetected;
   final String? errorMessage;
 
@@ -31,7 +43,9 @@ class ReceiveState {
     bool? isReceiving,
     String? decodedText,
     String? currentSymbols,
-    int? unitMs,
+    ReceivePhase? phase,
+    MorseLanguage? language,
+    int? detectedUnitMs,
     bool? isLightDetected,
     String? errorMessage,
   }) {
@@ -39,7 +53,9 @@ class ReceiveState {
       isReceiving: isReceiving ?? this.isReceiving,
       decodedText: decodedText ?? this.decodedText,
       currentSymbols: currentSymbols ?? this.currentSymbols,
-      unitMs: unitMs ?? this.unitMs,
+      phase: phase ?? this.phase,
+      language: language ?? this.language,
+      detectedUnitMs: detectedUnitMs ?? this.detectedUnitMs,
       isLightDetected: isLightDetected ?? this.isLightDetected,
       errorMessage: errorMessage,
     );
@@ -88,7 +104,6 @@ class ReceiveViewModel extends _$ReceiveViewModel {
       }
 
       _decoder = MorseDecoder(
-        unitMs: state.unitMs,
         onCharacter: (char) {
           state = state.copyWith(decodedText: state.decodedText + char);
         },
@@ -103,7 +118,8 @@ class ReceiveViewModel extends _$ReceiveViewModel {
 
       _controller = controller;
       await controller.startImageStream(_processFrame);
-      state = state.copyWith(isReceiving: true, errorMessage: null);
+      // フェーズ・言語・検出単位時間を初期状態に戻して受信開始
+      state = ReceiveState(isReceiving: true, decodedText: state.decodedText);
     } on CameraException catch (e) {
       await _disposeCamera();
       state = state.copyWith(
@@ -120,11 +136,8 @@ class ReceiveViewModel extends _$ReceiveViewModel {
       isReceiving: false,
       isLightDetected: false,
       currentSymbols: '',
+      phase: _decoder?.phase,
     );
-  }
-
-  void setUnitMs(int ms) {
-    state = state.copyWith(unitMs: ms);
   }
 
   void clearText() {
@@ -140,18 +153,29 @@ class ReceiveViewModel extends _$ReceiveViewModel {
     detector.addSample(_centerLuminance(image), nowMs);
 
     // 送信終了後は OFF→ON 遷移が来ないため、無音が続いたら最後の文字を確定
+    // （終了符号もここで確定して done になる）
     if (decoder.pendingSymbols.isNotEmpty &&
         !detector.isOn &&
         _lastEventMs > 0 &&
-        nowMs - _lastEventMs >= 7 * state.unitMs) {
+        nowMs - _lastEventMs >= 7 * decoder.unitMs) {
       decoder.flush();
     }
 
+    if (decoder.phase == ReceivePhase.done) {
+      // 受信完了: カメラを止める（ストリームのコールバック内なので次フレームで）
+      unawaited(Future(stopReceiving));
+    }
+
     if (detector.isOn != state.isLightDetected ||
-        decoder.pendingSymbols != state.currentSymbols) {
+        decoder.pendingSymbols != state.currentSymbols ||
+        decoder.phase != state.phase) {
       state = state.copyWith(
         isLightDetected: detector.isOn,
         currentSymbols: decoder.pendingSymbols,
+        phase: decoder.phase,
+        language: decoder.language,
+        detectedUnitMs:
+            decoder.phase == ReceivePhase.waitingSignal ? null : decoder.unitMs,
       );
     }
   }

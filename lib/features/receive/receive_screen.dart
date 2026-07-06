@@ -2,7 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants.dart';
+import '../../core/morse/morse_decoder.dart';
 import 'receive_view_model.dart';
 
 class ReceiveScreen extends ConsumerWidget {
@@ -40,11 +40,7 @@ class ReceiveScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _SpeedSlider(
-              unitMs: state.unitMs,
-              enabled: !state.isReceiving,
-              onChanged: (ms) => vm.setUnitMs(ms),
-            ),
+            _ProtocolStatus(state: state),
             const SizedBox(height: 8),
             Row(
               children: [
@@ -167,30 +163,41 @@ class _DecodedTextView extends StatelessWidget {
   }
 }
 
-class _SpeedSlider extends StatelessWidget {
-  const _SpeedSlider({
-    required this.unitMs,
-    required this.enabled,
-    required this.onChanged,
-  });
+/// プロトコルの進行状況（合図待ち → 受信中 → 完了）を表示する。
+/// 速度は開始合図から自動検出されるため、受信側にスライダーはない。
+class _ProtocolStatus extends StatelessWidget {
+  const _ProtocolStatus({required this.state});
 
-  final int unitMs;
-  final bool enabled;
-  final void Function(int ms) onChanged;
+  final ReceiveState state;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    final (icon, text) = switch (state.phase) {
+      ReceivePhase.waitingSignal => state.isReceiving
+          ? (Icons.hourglass_empty, '開始合図を待っています…')
+          : (Icons.info_outline, '受信開始で相手の開始合図を待ちます（速度は自動検出）'),
+      ReceivePhase.waitingLanguage => (
+          Icons.wifi_tethering,
+          '合図を検出（単位 ${state.detectedUnitMs}ms）— 言語符号待ち…',
+        ),
+      ReceivePhase.receivingBody => (
+          Icons.podcasts,
+          '受信中: ${state.language?.label}（単位 ${state.detectedUnitMs}ms）',
+        ),
+      ReceivePhase.done => (
+          Icons.check_circle_outline,
+          '受信完了（${state.language?.label}）',
+        ),
+    };
+
     return Row(
       children: [
-        Text('速度: ${unitMs}ms', style: Theme.of(context).textTheme.bodyMedium),
+        Icon(icon, size: 18, color: theme.colorScheme.primary),
+        const SizedBox(width: 8),
         Expanded(
-          child: Slider(
-            min: kMinUnitMs.toDouble(),
-            max: kMaxUnitMs.toDouble(),
-            divisions: (kMaxUnitMs - kMinUnitMs) ~/ 10,
-            value: unitMs.toDouble(),
-            onChanged: enabled ? (v) => onChanged(v.round()) : null,
-          ),
+          child: Text(text, style: theme.textTheme.bodyMedium),
         ),
       ],
     );

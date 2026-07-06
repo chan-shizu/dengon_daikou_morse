@@ -4,6 +4,7 @@ import 'package:torch_light/torch_light.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/constants.dart';
 import '../../core/morse/morse_encoder.dart';
+import '../../core/morse/morse_protocol.dart';
 
 part 'send_view_model.g.dart';
 
@@ -154,9 +155,14 @@ class SendViewModel extends _$SendViewModel {
     final sequence = state.morseSequence;
     final unitMs = state.unitMs;
     final mode = state.mode;
+    final language = state.language;
     final chars = text.split('');
 
-    bool isFirst = true;
+    // ヘッダー: 開始合図（プリアンブル）+ 言語符号
+    await _sendCode(kPreambleCode, mode, unitMs);
+    await _sleep(3 * unitMs);
+    await _sendCode(language.startCode, mode, unitMs);
+
     bool prevWasSpace = false;
 
     for (int i = 0; i < chars.length; i++) {
@@ -174,30 +180,39 @@ class SendViewModel extends _$SendViewModel {
       final code = sequence[i];
       if (code == null) continue;
 
-      // 文字間: 3単位 OFF（最初の文字と単語直後はスキップ）
-      if (!isFirst && !prevWasSpace) {
+      // 文字間: 3単位 OFF（単語直後はスキップ）
+      if (!prevWasSpace) {
         await _sleep(3 * unitMs);
         if (_cancelled) break;
       }
-      isFirst = false;
       prevWasSpace = false;
 
       state = state.copyWith(sendingCharIndex: i);
+      await _sendCode(code, mode, unitMs);
+    }
 
-      for (int j = 0; j < code.length; j++) {
-        if (_cancelled) break;
+    // フッター: 終了符号
+    if (_cancelled) return;
+    state = state.copyWith(sendingCharIndex: null);
+    await _sleep(3 * unitMs);
+    await _sendCode(language.endCode, mode, unitMs);
+  }
 
-        final onMs = (code[j] == '.' ? 1 : 3) * unitMs;
-        await _signalOn(mode);
-        await _sleep(onMs);
-        await _signalOff(mode);
+  /// 符号1つ分（'.' と '-' の列）を記号間1単位 OFF で点滅させる
+  Future<void> _sendCode(String code, SendMode mode, int unitMs) async {
+    for (int j = 0; j < code.length; j++) {
+      if (_cancelled) return;
 
-        if (_cancelled) break;
+      final onMs = (code[j] == '.' ? 1 : 3) * unitMs;
+      await _signalOn(mode);
+      await _sleep(onMs);
+      await _signalOff(mode);
 
-        // 記号間: 1単位 OFF（最後の記号の後はスキップ）
-        if (j < code.length - 1) {
-          await _sleep(unitMs);
-        }
+      if (_cancelled) return;
+
+      // 記号間: 1単位 OFF（最後の記号の後はスキップ）
+      if (j < code.length - 1) {
+        await _sleep(unitMs);
       }
     }
   }

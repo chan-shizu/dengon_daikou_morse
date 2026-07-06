@@ -115,13 +115,11 @@ const Map<String, String> kEnglishMorseTable = {
   ...kAlphabetMorseTable,
 };
 
-// 受信のデコード用統合表（符号が衝突する場合は和文が優先される）
-const Map<String, String> kMorseTable = {
-  ...kEnglishMorseTable,
-  ...kKanaMorseTable,
+// 逆引き用（モールス → 文字）。
+// 和文・欧文は符号が衝突するため、受信側はヘッダーの言語符号で表を選ぶ
+final Map<String, String> kJapaneseMorseTableReverse = {
+  for (final e in kJapaneseMorseTable.entries) e.value: e.key,
 };
-
-// 逆引き用（モールス → 文字）
-final Map<String, String> kMorseTableReverse = {
-  for (final e in kMorseTable.entries) e.value: e.key,
+final Map<String, String> kEnglishMorseTableReverse = {
+  for (final e in kEnglishMorseTable.entries) e.value: e.key,
 };

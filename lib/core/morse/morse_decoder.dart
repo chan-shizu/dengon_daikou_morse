@@ -1,3 +1,6 @@
+import '../constants.dart';
+import 'morse_encoder.dart';
+import 'morse_protocol.dart';
 import 'morse_table.dart';
 
 /// ライトの ON/OFF 遷移イベント。
@@ -89,44 +92,109 @@ class LightSignalDetector {
   }
 }
 
-/// ON/OFF 継続時間列をモールス符号経由でテキストにデコードする。
+/// 受信の進行フェーズ（通信プロトコルの状態機械）
+enum ReceivePhase {
+  /// 開始合図（プリアンブル）待ち
+  waitingSignal,
+
+  /// 言語符号待ち
+  waitingLanguage,
+
+  /// 本文受信中
+  receivingBody,
+
+  /// 終了符号を受信して完了
+  done,
+}
+
+/// ON/OFF 継続時間列を通信プロトコルに沿ってテキストにデコードする。
 ///
-/// タイミング判定（単位時間 unitMs 基準）:
+/// プリアンブル → 言語符号 → 本文 → 終了符号 の順に解釈する。
+/// 単位時間はプリアンブルの点の長さ（中央値）から自動校正するため、
+/// 送信側とスライダーを合わせる必要はない。
+///
+/// 校正後のタイミング判定（単位時間 unitMs 基準）:
 /// - ON: 2単位未満 → 点、それ以上 → 線
 /// - OFF: 2単位未満 → 記号間、2〜5単位 → 文字確定、5単位以上 → 文字確定+スペース
 class MorseDecoder {
-  MorseDecoder({
-    required this.unitMs,
-    required this.onCharacter,
-  });
+  MorseDecoder({required this.onCharacter});
 
-  final int unitMs;
-
-  /// 文字が確定するたびに呼ばれる（スペース含む）
+  /// 本文の文字が確定するたびに呼ばれる（スペース含む）
   final void Function(String char) onCharacter;
 
+  ReceivePhase _phase = ReceivePhase.waitingSignal;
+  MorseLanguage? _language;
+  int _unitMs = kDefaultUnitMs;
+  final List<int> _preambleOnMs = [];
   final StringBuffer _symbols = StringBuffer();
   // 先頭や連続のスペースを出さないためのフラグ
   bool _lastWasSpace = true;
+
+  ReceivePhase get phase => _phase;
+
+  /// ヘッダーの言語符号で確定した言語（確定前は null）
+  MorseLanguage? get language => _language;
+
+  /// プリアンブルから校正した単位時間（校正前はデフォルト値）
+  int get unitMs => _unitMs;
 
   /// 確定前の符号バッファ（UI表示用）
   String get pendingSymbols => _symbols.toString();
 
   void onSignal(SignalEvent event) {
+    switch (_phase) {
+      case ReceivePhase.waitingSignal:
+        _onPreambleSignal(event);
+      case ReceivePhase.waitingLanguage:
+      case ReceivePhase.receivingBody:
+        _onCodeSignal(event);
+      case ReceivePhase.done:
+        break;
+    }
+  }
+
+  /// プリアンブル検出。単位時間が未知なので相対比較で判定する:
+  /// 同じ長さの ON が [kPreambleMinDots] 個以上続き、その2倍以上の OFF で
+  /// 終端したらプリアンブルとみなし、ON の中央値を単位時間とする。
+  void _onPreambleSignal(SignalEvent event) {
+    if (!event.isOn) {
+      // ON が終わった: 点候補として記録。長さが揃わなければやり直し
+      final d = event.durationMs;
+      if (_preambleOnMs.isNotEmpty) {
+        final unit = _median(_preambleOnMs);
+        if (d > unit * 2 || d * 2 < unit) {
+          _preambleOnMs.clear();
+        }
+      }
+      _preambleOnMs.add(d);
+      return;
+    }
+    // OFF が終わった: 点間（1単位）より明確に長ければ点列の終端
+    if (_preambleOnMs.isEmpty) return;
+    if (event.durationMs >= _median(_preambleOnMs) * 2) {
+      if (_preambleOnMs.length >= kPreambleMinDots) {
+        _unitMs = _median(_preambleOnMs);
+        _phase = ReceivePhase.waitingLanguage;
+      }
+      _preambleOnMs.clear();
+    }
+  }
+
+  void _onCodeSignal(SignalEvent event) {
     if (event.isOn) {
       // OFF が終わった: 長さに応じて文字・単語の区切りを判定
-      if (event.durationMs >= 5 * unitMs) {
+      if (event.durationMs >= 5 * _unitMs) {
         _flushSymbols();
-        if (!_lastWasSpace) {
+        if (_phase == ReceivePhase.receivingBody && !_lastWasSpace) {
           onCharacter(' ');
           _lastWasSpace = true;
         }
-      } else if (event.durationMs >= 2 * unitMs) {
+      } else if (event.durationMs >= 2 * _unitMs) {
         _flushSymbols();
       }
     } else {
       // ON が終わった: 点か線を確定
-      _symbols.write(event.durationMs < 2 * unitMs ? '.' : '-');
+      _symbols.write(event.durationMs < 2 * _unitMs ? '.' : '-');
     }
   }
 
@@ -137,7 +205,37 @@ class MorseDecoder {
     if (_symbols.isEmpty) return;
     final code = _symbols.toString();
     _symbols.clear();
-    onCharacter(kMorseTableReverse[code] ?? '?');
-    _lastWasSpace = false;
+
+    switch (_phase) {
+      case ReceivePhase.waitingLanguage:
+        // 言語符号以外はノイズとして読み捨てる
+        for (final lang in MorseLanguage.values) {
+          if (code == lang.startCode) {
+            _language = lang;
+            _phase = ReceivePhase.receivingBody;
+            break;
+          }
+        }
+      case ReceivePhase.receivingBody:
+        final language = _language!;
+        if (code == language.endCode) {
+          _phase = ReceivePhase.done;
+          return;
+        }
+        final table = switch (language) {
+          MorseLanguage.japanese => kJapaneseMorseTableReverse,
+          MorseLanguage.english => kEnglishMorseTableReverse,
+        };
+        onCharacter(table[code] ?? '?');
+        _lastWasSpace = false;
+      case ReceivePhase.waitingSignal:
+      case ReceivePhase.done:
+        break;
+    }
+  }
+
+  static int _median(List<int> values) {
+    final sorted = [...values]..sort();
+    return sorted[sorted.length ~/ 2];
   }
 }

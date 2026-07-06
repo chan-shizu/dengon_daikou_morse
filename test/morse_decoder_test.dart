@@ -1,99 +1,164 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dengon_daikou_morse/core/morse/morse_decoder.dart';
 import 'package:dengon_daikou_morse/core/morse/morse_encoder.dart';
+import 'package:dengon_daikou_morse/core/morse/morse_protocol.dart';
 
 const _unitMs = 200;
 
-/// テキストを送信仕様どおりの SignalEvent 列に変換する
+/// 送信仕様どおりの SignalEvent 列を組み立てるビルダー
 /// （点=1・線=3単位ON、記号間=1・文字間=3・単語間=7単位OFF）
+class _EventBuilder {
+  _EventBuilder({this.unitMs = _unitMs});
+
+  final int unitMs;
+  final List<SignalEvent> events = [];
+  int _offMs = 100 * _unitMs; // 送信開始前の長い暗闇
+
+  /// 直前の OFF を確定して onMs だけ点灯する
+  void pulse(int onMs) {
+    events.add(SignalEvent(isOn: true, durationMs: _offMs));
+    events.add(SignalEvent(isOn: false, durationMs: onMs));
+    _offMs = unitMs; // 既定は記号間ギャップ
+  }
+
+  /// 次の点灯までの OFF 時間を指定する
+  void gap(int ms) => _offMs = ms;
+
+  /// 符号1つ分を送り、文字間ギャップで終える
+  void code(String code) {
+    for (final symbol in code.split('')) {
+      pulse((symbol == '.' ? 1 : 3) * unitMs);
+    }
+    gap(3 * unitMs);
+  }
+
+  /// プロトコルヘッダー（プリアンブル + 言語符号）
+  void header(MorseLanguage language) {
+    code(kPreambleCode);
+    code(language.startCode);
+  }
+}
+
+/// テキストをプロトコル込みの SignalEvent 列に変換する
 List<SignalEvent> _encodeToEvents(
   String text, {
   int unitMs = _unitMs,
   MorseLanguage language = MorseLanguage.japanese,
 }) {
-  final events = <SignalEvent>[];
+  final builder = _EventBuilder(unitMs: unitMs);
+  builder.header(language);
+
   final codes = MorseEncoder.encode(text, language: language);
   final chars = text.split('');
-
-  var offMs = unitMs * 100; // 送信開始前の長い暗闇
   for (var i = 0; i < chars.length; i++) {
     if (chars[i] == ' ') {
-      offMs += 7 * unitMs;
+      builder.gap(7 * unitMs);
       continue;
     }
     final code = codes[i];
     if (code == null) continue;
-    if (offMs == 0) offMs = 3 * unitMs; // 文字間
-
-    for (var j = 0; j < code.length; j++) {
-      // OFF → ON 遷移（直前の OFF の長さを持つ）
-      events.add(SignalEvent(isOn: true, durationMs: offMs));
-      // ON → OFF 遷移
-      final onMs = (code[j] == '.' ? 1 : 3) * unitMs;
-      events.add(SignalEvent(isOn: false, durationMs: onMs));
-      offMs = j < code.length - 1 ? unitMs : 0;
-    }
+    builder.code(code);
   }
-  return events;
+
+  builder.code(language.endCode);
+  return builder.events;
 }
 
-String _decode(List<SignalEvent> events, {int unitMs = _unitMs}) {
+({String text, MorseDecoder decoder}) _decode(List<SignalEvent> events) {
   final buffer = StringBuffer();
-  final decoder = MorseDecoder(unitMs: unitMs, onCharacter: buffer.write);
+  final decoder = MorseDecoder(onCharacter: buffer.write);
   events.forEach(decoder.onSignal);
   decoder.flush();
-  return buffer.toString();
+  return (text: buffer.toString(), decoder: decoder);
 }
 
 void main() {
-  group('MorseDecoder', () {
-    test('カタカナをデコードできる', () {
-      expect(_decode(_encodeToEvents('モールス')), 'モールス');
+  group('MorseDecoder（プロトコル）', () {
+    test('和文をデコードして完了する', () {
+      final result = _decode(_encodeToEvents('モールス'));
+      expect(result.text, 'モールス');
+      expect(result.decoder.language, MorseLanguage.japanese);
+      expect(result.decoder.phase, ReceivePhase.done);
     });
 
-    test('英文と共通の符号は和文（カタカナ）として復元される', () {
-      // S(...)=ラ、O(---)=レ。逆引きは和文優先
-      expect(
-        _decode(_encodeToEvents('SOS', language: MorseLanguage.english)),
-        'ラレラ',
-      );
+    test('言語符号により欧文としてデコードされる', () {
+      // 従来は逆引きが和文優先で SOS がラレラになっていた
+      final result =
+          _decode(_encodeToEvents('SOS', language: MorseLanguage.english));
+      expect(result.text, 'SOS');
+      expect(result.decoder.language, MorseLanguage.english);
+      expect(result.decoder.phase, ReceivePhase.done);
     });
 
     test('単語間スペースを復元できる', () {
-      expect(_decode(_encodeToEvents('アオ カキ')), 'アオ カキ');
+      expect(_decode(_encodeToEvents('アオ カキ')).text, 'アオ カキ');
     });
 
-    test('送信開始前の長い暗闇で先頭にスペースが付かない', () {
-      expect(_decode(_encodeToEvents('ア')), 'ア');
+    test('開始合図がなければ本文をデコードしない', () {
+      final builder = _EventBuilder();
+      builder.code(MorseLanguage.japanese.startCode);
+      for (final code in MorseEncoder.encode('モールス')) {
+        builder.code(code!);
+      }
+      final result = _decode(builder.events);
+      expect(result.text, '');
+      expect(result.decoder.phase, ReceivePhase.waitingSignal);
     });
 
-    test('未知の符号は ? になる', () {
-      // ........（8点）は表にない
-      final events = <SignalEvent>[
-        for (var i = 0; i < 8; i++) ...[
-          SignalEvent(isOn: true, durationMs: i == 0 ? 10000 : _unitMs),
-          const SignalEvent(isOn: false, durationMs: _unitMs),
-        ],
-      ];
-      expect(_decode(events), '?');
+    test('プリアンブルから単位時間を自動校正できる', () {
+      for (final unitMs in [80, 350]) {
+        final result = _decode(_encodeToEvents('モールス', unitMs: unitMs));
+        expect(result.text, 'モールス', reason: 'unitMs=$unitMs');
+        expect(result.decoder.unitMs, unitMs);
+      }
+    });
+
+    test('プリアンブル前のノイズ点滅を読み捨てる', () {
+      final builder = _EventBuilder();
+      // 不揃いな点滅（線と点の混在）の後に正規のヘッダー
+      builder.pulse(3 * _unitMs);
+      builder.pulse(_unitMs);
+      builder.gap(5 * _unitMs);
+      builder.header(MorseLanguage.japanese);
+      builder.code('.-'); // イ
+      builder.code(MorseLanguage.japanese.endCode);
+      expect(_decode(builder.events).text, 'イ');
+    });
+
+    test('本文中の表にない符号は ? になる', () {
+      final builder = _EventBuilder();
+      builder.header(MorseLanguage.japanese);
+      builder.code('......--'); // どの表にもない符号
+      builder.code(MorseLanguage.japanese.endCode);
+      expect(_decode(builder.events).text, '?');
+    });
+
+    test('終了符号の後の点滅は無視される', () {
+      final builder = _EventBuilder();
+      builder.header(MorseLanguage.japanese);
+      builder.code('.-'); // イ
+      builder.code(MorseLanguage.japanese.endCode);
+      builder.code('-..'); // ホ（終了後なので無視されるべき）
+      final result = _decode(builder.events);
+      expect(result.text, 'イ');
+      expect(result.decoder.phase, ReceivePhase.done);
     });
 
     test('タイミングの多少の揺れを許容する', () {
       // 点=0.8単位、線=2.5単位、文字間=2.6単位でも判定できる
-      final events = <SignalEvent>[
-        // ト: ..-..
-        SignalEvent(isOn: true, durationMs: 10000),
-        SignalEvent(isOn: false, durationMs: (0.8 * _unitMs).round()),
-        SignalEvent(isOn: true, durationMs: _unitMs),
-        SignalEvent(isOn: false, durationMs: (1.2 * _unitMs).round()),
-        SignalEvent(isOn: true, durationMs: _unitMs),
-        SignalEvent(isOn: false, durationMs: (2.5 * _unitMs).round()),
-        SignalEvent(isOn: true, durationMs: (0.9 * _unitMs).round()),
-        SignalEvent(isOn: false, durationMs: _unitMs),
-        SignalEvent(isOn: true, durationMs: _unitMs),
-        SignalEvent(isOn: false, durationMs: (0.7 * _unitMs).round()),
-      ];
-      expect(_decode(events), 'ト');
+      final builder = _EventBuilder();
+      builder.header(MorseLanguage.japanese);
+      // ト: ..-..
+      builder.pulse((0.8 * _unitMs).round());
+      builder.pulse(_unitMs);
+      builder.gap((1.2 * _unitMs).round());
+      builder.pulse((2.5 * _unitMs).round());
+      builder.gap((0.7 * _unitMs).round());
+      builder.pulse((0.9 * _unitMs).round());
+      builder.pulse(_unitMs);
+      builder.gap((2.6 * _unitMs).round());
+      builder.code(MorseLanguage.japanese.endCode);
+      expect(_decode(builder.events).text, 'ト');
     });
   });
 
@@ -163,13 +228,12 @@ void main() {
 
   group('エンコード→デコード ラウンドトリップ', () {
     test('輝度サンプル経由でも復元できる', () {
-      // エンコーダー出力から輝度サンプル列を合成し、
+      // プロトコル込みの点滅から輝度サンプル列を合成し、
       // Detector → Decoder のパイプライン全体を検証する
       const text = 'モールス';
-      final codes = MorseEncoder.encode(text);
 
       final buffer = StringBuffer();
-      final decoder = MorseDecoder(unitMs: _unitMs, onCharacter: buffer.write);
+      final decoder = MorseDecoder(onCharacter: buffer.write);
       final detector = LightSignalDetector(
         onEvent: decoder.onSignal,
       );
@@ -182,20 +246,30 @@ void main() {
         }
       }
 
-      emit(false, 1000); // 送信前の暗闇
-      var first = true;
-      for (final code in codes) {
-        if (!first) emit(false, 3 * _unitMs);
-        first = false;
-        for (var j = 0; j < code!.length; j++) {
+      void emitCode(String code) {
+        for (var j = 0; j < code.length; j++) {
           if (j > 0) emit(false, _unitMs);
           emit(true, (code[j] == '.' ? 1 : 3) * _unitMs);
         }
       }
+
+      emit(false, 1000); // 送信前の暗闇
+      const language = MorseLanguage.japanese;
+      emitCode(kPreambleCode);
+      emit(false, 3 * _unitMs);
+      emitCode(language.startCode);
+      for (final code in MorseEncoder.encode(text)) {
+        emit(false, 3 * _unitMs);
+        emitCode(code!);
+      }
+      emit(false, 3 * _unitMs);
+      emitCode(language.endCode);
       emit(false, 8 * _unitMs); // 送信後の暗闇
       decoder.flush();
 
       expect(buffer.toString(), text);
+      expect(decoder.phase, ReceivePhase.done);
+      expect(decoder.unitMs, closeTo(_unitMs, 40));
     });
   });
 }
