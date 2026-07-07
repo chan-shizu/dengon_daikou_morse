@@ -2,18 +2,32 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
+import 'package:record/record.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../core/audio/goertzel.dart';
+import '../../core/constants.dart';
 import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_decoder.dart';
 import '../../core/morse/morse_encoder.dart';
 
 part 'receive_view_model.g.dart';
 
+/// 受信手段（光=カメラ / 音=マイク）
+enum ReceiveSignal {
+  light('光（カメラ）'),
+  sound('音（マイク）');
+
+  const ReceiveSignal(this.label);
+
+  final String label;
+}
+
 class ReceiveState {
   const ReceiveState({
     this.isReceiving = false,
+    this.signal = ReceiveSignal.light,
     this.decodedText = '',
     this.currentSymbols = '',
     this.phase = ReceivePhase.waitingSignal,
@@ -25,6 +39,7 @@ class ReceiveState {
   });
 
   final bool isReceiving;
+  final ReceiveSignal signal;
   final String decodedText;
 
   // 確定前のモールス符号バッファ
@@ -42,11 +57,13 @@ class ReceiveState {
   // プリアンブルから自動検出した単位時間（検出前は null）
   final int? detectedUnitMs;
 
+  // 光またはトーンを検出中か（インジケータ用）
   final bool isLightDetected;
   final String? errorMessage;
 
   ReceiveState copyWith({
     bool? isReceiving,
+    ReceiveSignal? signal,
     String? decodedText,
     String? currentSymbols,
     ReceivePhase? phase,
@@ -58,6 +75,7 @@ class ReceiveState {
   }) {
     return ReceiveState(
       isReceiving: isReceiving ?? this.isReceiving,
+      signal: signal ?? this.signal,
       decodedText: decodedText ?? this.decodedText,
       currentSymbols: currentSymbols ?? this.currentSymbols,
       phase: phase ?? this.phase,
@@ -73,23 +91,64 @@ class ReceiveState {
 @riverpod
 class ReceiveViewModel extends _$ReceiveViewModel {
   CameraController? _controller;
+  AudioRecorder? _recorder;
+  StreamSubscription<Object?>? _audioSub;
+  GoertzelToneDetector? _goertzel;
   LightSignalDetector? _detector;
   MorseDecoder? _decoder;
   int _lastEventMs = 0;
   int _lastPixelCount = 0;
 
-  /// View がプレビュー表示に使う（受信中のみ非 null）
+  /// View がプレビュー表示に使う（光受信中のみ非 null）
   CameraController? get cameraController => _controller;
 
   @override
   ReceiveState build() {
-    ref.onDispose(_disposeCamera);
+    ref.onDispose(_disposeCapture);
     return const ReceiveState();
+  }
+
+  void setSignal(ReceiveSignal signal) {
+    if (state.isReceiving) return;
+    state = state.copyWith(signal: signal);
   }
 
   Future<void> startReceiving() async {
     if (state.isReceiving) return;
 
+    _decoder = MorseDecoder(
+      onCharacter: (char) {
+        state = state.copyWith(decodedText: state.decodedText + char);
+      },
+    );
+    _detector = LightSignalDetector(
+      onEvent: (event) {
+        _lastEventMs = DateTime.now().millisecondsSinceEpoch;
+        _decoder!.onSignal(event);
+      },
+    );
+    _lastEventMs = 0;
+    _lastPixelCount = 0;
+
+    final started = switch (state.signal) {
+      ReceiveSignal.light => await _startCamera(),
+      ReceiveSignal.sound => await _startMicrophone(),
+    };
+    if (!started) return;
+
+    // 長時間受信中にスリープしないようにする
+    try {
+      await WakelockPlus.enable();
+    } catch (_) {}
+    // フェーズ・言語・画像・検出単位時間を初期状態に戻して受信開始
+    state = ReceiveState(
+      isReceiving: true,
+      signal: state.signal,
+      decodedText: state.decodedText,
+    );
+  }
+
+  Future<bool> _startCamera() async {
     try {
       final cameras = await availableCameras();
       final back = cameras.firstWhere(
@@ -112,39 +171,55 @@ class ReceiveViewModel extends _$ReceiveViewModel {
         // ロック非対応の端末では成り行きで動かす
       }
 
-      _decoder = MorseDecoder(
-        onCharacter: (char) {
-          state = state.copyWith(decodedText: state.decodedText + char);
-        },
-      );
-      _detector = LightSignalDetector(
-        onEvent: (event) {
-          _lastEventMs = DateTime.now().millisecondsSinceEpoch;
-          _decoder!.onSignal(event);
-        },
-      );
-      _lastEventMs = 0;
-      _lastPixelCount = 0;
-
       _controller = controller;
       await controller.startImageStream(_processFrame);
-      // 長時間の画像受信中にスリープしないようにする
-      try {
-        await WakelockPlus.enable();
-      } catch (_) {}
-      // フェーズ・言語・画像・検出単位時間を初期状態に戻して受信開始
-      state = ReceiveState(isReceiving: true, decodedText: state.decodedText);
+      return true;
     } on CameraException catch (e) {
-      await _disposeCamera();
+      await _disposeCapture();
       state = state.copyWith(
         errorMessage: 'カメラを起動できませんでした: ${e.description ?? e.code}',
       );
+      return false;
+    }
+  }
+
+  Future<bool> _startMicrophone() async {
+    try {
+      final recorder = AudioRecorder();
+      if (!await recorder.hasPermission()) {
+        recorder.dispose();
+        state = state.copyWith(errorMessage: 'マイクの使用が許可されていません');
+        return false;
+      }
+
+      _goertzel = GoertzelToneDetector(
+        sampleRate: kAudioSampleRate,
+        toneHz: kToneHz,
+        onWindow: (magnitude, timestampMs) =>
+            _detector?.addSample(magnitude, timestampMs),
+      );
+
+      final stream = await recorder.startStream(const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: kAudioSampleRate,
+        numChannels: 1,
+      ));
+      _recorder = recorder;
+      _audioSub = stream.listen((chunk) {
+        _goertzel?.addPcm16(chunk);
+        _afterSamples();
+      });
+      return true;
+    } catch (e) {
+      await _disposeCapture();
+      state = state.copyWith(errorMessage: 'マイクを起動できませんでした: $e');
+      return false;
     }
   }
 
   Future<void> stopReceiving() async {
     if (!state.isReceiving) return;
-    await _disposeCamera();
+    await _disposeCapture();
     _decoder?.flush();
     state = state.copyWith(
       isReceiving: false,
@@ -161,14 +236,24 @@ class ReceiveViewModel extends _$ReceiveViewModel {
 
   void _processFrame(CameraImage image) {
     final detector = _detector;
+    if (detector == null) return;
+
+    detector.addSample(
+      _centerLuminance(image),
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    _afterSamples();
+  }
+
+  /// サンプル追加後の共通処理: 無音タイムアウト・完了判定・状態同期
+  void _afterSamples() {
+    final detector = _detector;
     final decoder = _decoder;
     if (detector == null || decoder == null) return;
 
-    final nowMs = DateTime.now().millisecondsSinceEpoch;
-    detector.addSample(_centerLuminance(image), nowMs);
-
     // 送信終了後は OFF→ON 遷移が来ないため、無音が続いたら最後の文字を確定
     // （終了符号もここで確定して done になる）
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (decoder.pendingSymbols.isNotEmpty &&
         !detector.isOn &&
         _lastEventMs > 0 &&
@@ -177,7 +262,7 @@ class ReceiveViewModel extends _$ReceiveViewModel {
     }
 
     if (decoder.phase == ReceivePhase.done) {
-      // 受信完了: カメラを止める（ストリームのコールバック内なので次フレームで）
+      // 受信完了: 取り込みを止める（ストリームのコールバック内なので次周期で）
       unawaited(Future(stopReceiving));
     }
 
@@ -231,10 +316,11 @@ class ReceiveViewModel extends _$ReceiveViewModel {
     return count == 0 ? 0 : sum / count;
   }
 
-  Future<void> _disposeCamera() async {
+  Future<void> _disposeCapture() async {
     try {
       await WakelockPlus.disable();
     } catch (_) {}
+
     final controller = _controller;
     _controller = null;
     if (controller != null) {
@@ -245,6 +331,18 @@ class ReceiveViewModel extends _$ReceiveViewModel {
       } catch (_) {}
       await controller.dispose();
     }
+
+    await _audioSub?.cancel();
+    _audioSub = null;
+    final recorder = _recorder;
+    _recorder = null;
+    if (recorder != null) {
+      try {
+        await recorder.stop();
+      } catch (_) {}
+      recorder.dispose();
+    }
+    _goertzel = null;
     _detector = null;
   }
 }

@@ -94,13 +94,18 @@ flutter test     # テスト実行
 ```xml
 <uses-permission android:name="android.permission.FLASHLIGHT"/>
 <uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
 ```
 
 **iOS** — `ios/Runner/Info.plist` の `<dict>` 内に追加:
 
 ```xml
 <key>NSCameraUsageDescription</key>
-<string>モールス信号の受信にカメラを使用します</string>
+<string>モールス信号の受信と送信画像の撮影にカメラを使用します</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>音（トーン）によるモールス信号の受信にマイクを使用します</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>送信する画像の選択に写真ライブラリを使用します</string>
 ```
 
 ---
@@ -118,6 +123,7 @@ flutter test     # テスト実行
 | `wakelock_plus` | 送受信中のスリープ防止 | dependencies |
 | `image_picker` | 送信画像の選択（フォルダ/カメラ） | dependencies |
 | `image` | 画像の縮小・階調変換 | dependencies |
+| `record` | マイクPCMストリーム取得（音受信） | dependencies |
 | `riverpod_generator` | コード生成 | dev_dependencies |
 | `build_runner` | コード生成実行 | dev_dependencies |
 
@@ -145,6 +151,20 @@ flutter test     # テスト実行
 - 受信側の単位時間はプリアンブルの点の長さ（中央値）から自動検出するため、速度スライダーは送信側のみ
 - ヘッダー・終了符号は文字表と衝突するものがある（CT=サ、AR=ン）ため、必ず状態機械の位置で解釈する
 - 逆引き表は言語別（`kJapaneseMorseTableReverse` / `kEnglishMorseTableReverse`）。言語符号で確定してから選ぶ
+
+### 伝送路（光 / 音）
+
+プロトコルは共通で、ON/OFF の物理層だけが異なる。送信計画は `signal_plan.dart` の `SignalPulse` 列に統一。
+
+| | 光 | 音 |
+|---|---|---|
+| 送信 | 背面ライト点滅（`torch_light`） | 3kHzトーンをWAVに合成し一括再生（`tone_synth.dart`。resume/pause はジッタが出るため不可） |
+| 受信 | カメラ中央領域の輝度（30fps） | マイクPCM16 → Goertzel でトーン振幅（`goertzel.dart`、5ms窓） |
+| 単位時間 | 50〜500ms（推奨200ms以上） | 10〜100ms（デフォルト20ms） |
+
+- Goertzel の出力は輝度と同じ0〜255スケールにし、`LightSignalDetector` 以降を完全に共用する
+- 音受信のタイムスタンプは累積サンプル数から算出（マイク取り込みジッタの影響なし）
+- 送信モードの「光+音」は光のタイミングで音も鳴らす人間向け機能で、高速化とは別物
 
 ### 画像送信（`morse_image_codec.dart` / `gray_image.dart`）
 
@@ -174,4 +194,5 @@ flutter test     # テスト実行
 - [x] 受信ViewModel / 受信UI
 - [x] 通信プロトコル（開始合図・言語符号・終了符号・単位時間の自動校正）
 - [x] 画像送受信（4階調ディザ変換・画質選択・想定送信時間・逐次表示）
-- [ ] 実機2台での送受信テスト（閾値・ROI調整）
+- [x] 音（トーン）での送受信（波形合成送信・Goertzelマイク受信・光/音選択）
+- [ ] 実機2台での送受信テスト（閾値・ROI調整、音は環境ノイズ・残響の影響確認）

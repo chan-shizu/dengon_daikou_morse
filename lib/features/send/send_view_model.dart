@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -5,14 +6,18 @@ import 'package:image_picker/image_picker.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../../core/audio/tone_synth.dart';
 import '../../core/constants.dart';
 import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_encoder.dart';
 import '../../core/morse/morse_image_codec.dart';
-import '../../core/morse/morse_protocol.dart';
+import '../../core/morse/signal_plan.dart';
 
 part 'send_view_model.g.dart';
 
+/// 送信手段。
+/// 光は点滅（単位 50〜500ms）、音はトーン波形の一括再生（単位 10〜100ms）で
+/// 高速。光+音は光のタイミングに合わせて音も鳴らす（人が聞く用）
 enum SendMode {
   light('光'),
   sound('音'),
@@ -42,6 +47,7 @@ class SendState {
     this.morseSequence = const [],
     this.isSending = false,
     this.unitMs = kDefaultUnitMs,
+    this.soundUnitMs = kSoundDefaultUnitMs,
     this.sendingCharIndex,
     this.mode = SendMode.light,
     this.language = MorseLanguage.japanese,
@@ -55,7 +61,12 @@ class SendState {
   final String inputText;
   final List<String?> morseSequence;
   final bool isSending;
+
+  // 光送信の単位時間
   final int unitMs;
+
+  // 音送信の単位時間（マイク受信は高分解能なので短くできる）
+  final int soundUnitMs;
 
   // 送信中の文字のインデックス（送信中以外は null）
   final int? sendingCharIndex;
@@ -74,10 +85,13 @@ class SendState {
   // 画像送信の進捗（送信済みビット数）
   final int sentBits;
 
+  /// 現在の送信手段で使う単位時間
+  int get effectiveUnitMs => mode == SendMode.sound ? soundUnitMs : unitMs;
+
   /// 画像の想定送信時間（ms）。画像未選択なら null
   int? get estimatedImageMs => image == null
       ? null
-      : MorseImageCodec.transmissionMs(imagePayload, unitMs);
+      : MorseImageCodec.transmissionMs(imagePayload, effectiveUnitMs);
 
   bool get canSend => switch (content) {
         SendContent.text => inputText.isNotEmpty,
@@ -89,6 +103,7 @@ class SendState {
     List<String?>? morseSequence,
     bool? isSending,
     int? unitMs,
+    int? soundUnitMs,
     int? sendingCharIndex,
     SendMode? mode,
     MorseLanguage? language,
@@ -103,6 +118,7 @@ class SendState {
       morseSequence: morseSequence ?? this.morseSequence,
       isSending: isSending ?? this.isSending,
       unitMs: unitMs ?? this.unitMs,
+      soundUnitMs: soundUnitMs ?? this.soundUnitMs,
       // 送信位置は毎回明示的に渡す（送信終了時に null へ戻すため）
       sendingCharIndex: sendingCharIndex,
       mode: mode ?? this.mode,
@@ -119,14 +135,22 @@ class SendState {
 @riverpod
 class SendViewModel extends _$SendViewModel {
   bool _cancelled = false;
+
+  // 光+音モードで resume/pause するループ再生プレイヤー
   AudioPlayer? _player;
+
+  // 音モードで合成波形を一括再生するプレイヤー
+  AudioPlayer? _dataPlayer;
 
   // 画質変更時に変換し直すため、選択画像の元データを保持する
   Uint8List? _sourceImageBytes;
 
   @override
   SendState build() {
-    ref.onDispose(() => _player?.dispose());
+    ref.onDispose(() {
+      _player?.dispose();
+      _dataPlayer?.dispose();
+    });
     return const SendState();
   }
 
@@ -139,6 +163,10 @@ class SendViewModel extends _$SendViewModel {
 
   void setUnitMs(int ms) {
     state = state.copyWith(unitMs: ms);
+  }
+
+  void setSoundUnitMs(int ms) {
+    state = state.copyWith(soundUnitMs: ms);
   }
 
   void setMode(SendMode mode) {
@@ -198,14 +226,13 @@ class SendViewModel extends _$SendViewModel {
 
     try {
       await WakelockPlus.enable();
-      if (state.mode.usesSound) {
-        await _preparePlayer();
-      }
-      switch (state.content) {
-        case SendContent.text:
-          await _sendMorse();
-        case SendContent.image:
-          await _sendImage();
+      if (state.mode == SendMode.sound) {
+        await _sendAsTone();
+      } else {
+        if (state.mode.usesSound) {
+          await _preparePlayer();
+        }
+        await _sendWithLight();
       }
     } catch (_) {
       // シミュレータ等でライトが使えない場合は無視
@@ -215,6 +242,9 @@ class SendViewModel extends _$SendViewModel {
       } catch (_) {}
       try {
         await _player?.pause();
+      } catch (_) {}
+      try {
+        await _dataPlayer?.stop();
       } catch (_) {}
       try {
         await WakelockPlus.disable();
@@ -246,99 +276,74 @@ class SendViewModel extends _$SendViewModel {
     if (mode.usesSound) await _player?.pause();
   }
 
-  Future<void> _sendMorse() async {
-    final text = state.inputText;
-    final sequence = state.morseSequence;
-    final unitMs = state.unitMs;
-    final mode = state.mode;
-    final language = state.language;
-    final chars = text.split('');
+  List<SignalPulse> _buildPlan() => switch (state.content) {
+        SendContent.text => buildTextPlan(
+            state.inputText, state.morseSequence, state.language),
+        SendContent.image => buildImagePlan(state.imagePayload),
+      };
 
-    // ヘッダー: 開始合図（プリアンブル）+ 言語符号
-    await _sendCode(kPreambleCode, mode, unitMs);
-    await _sleep(3 * unitMs);
-    await _sendCode(language.startCode, mode, unitMs);
-
-    bool prevWasSpace = false;
-
-    for (int i = 0; i < chars.length; i++) {
-      if (_cancelled) break;
-
-      final ch = chars[i];
-
-      if (ch == ' ' || ch == '　') {
-        // 単語間: 7単位 OFF
-        await _sleep(7 * unitMs);
-        prevWasSpace = true;
-        continue;
-      }
-
-      final code = sequence[i];
-      if (code == null) continue;
-
-      // 文字間: 3単位 OFF（単語直後はスキップ）
-      if (!prevWasSpace) {
-        await _sleep(3 * unitMs);
-        if (_cancelled) break;
-      }
-      prevWasSpace = false;
-
-      state = state.copyWith(sendingCharIndex: i);
-      await _sendCode(code, mode, unitMs);
-    }
-
-    // フッター: 終了符号
-    if (_cancelled) return;
-    state = state.copyWith(sendingCharIndex: null);
-    await _sleep(3 * unitMs);
-    await _sendCode(language.endCode, mode, unitMs);
-  }
-
-  /// 画像送信: プリアンブル → 画像モード符号 → メタ+画素ビット列。
-  /// ビットは 0=点（1単位ON）/ 1=線（3単位ON）、ビット間は1単位OFF。
-  /// 受信側は画素数に達した時点で完了するため終了符号はない
-  Future<void> _sendImage() async {
-    final payload = state.imagePayload;
+  /// 光（または光+音）でパルス計画を順に点滅させる
+  Future<void> _sendWithLight() async {
+    final plan = _buildPlan();
     final unitMs = state.unitMs;
     final mode = state.mode;
 
-    await _sendCode(kPreambleCode, mode, unitMs);
-    await _sleep(3 * unitMs);
-    await _sendCode(kImageStartCode, mode, unitMs);
-    await _sleep(3 * unitMs);
-
-    for (var i = 0; i < payload.length; i++) {
+    for (final pulse in plan) {
       if (_cancelled) return;
 
+      state = state.copyWith(
+        sendingCharIndex: pulse.charIndex,
+        sentBits: pulse.bitIndex != null ? pulse.bitIndex! + 1 : null,
+      );
+
       await _signalOn(mode);
-      await _sleep((payload[i] ? 3 : 1) * unitMs);
+      await _sleep(pulse.onUnits * unitMs);
       await _signalOff(mode);
 
-      state = state.copyWith(sentBits: i + 1);
-
-      if (i < payload.length - 1) {
-        await _sleep(unitMs);
-      }
+      if (_cancelled) return;
+      await _sleep(pulse.gapUnits * unitMs);
     }
   }
 
-  /// 符号1つ分（'.' と '-' の列）を記号間1単位 OFF で点滅させる
-  Future<void> _sendCode(String code, SendMode mode, int unitMs) async {
-    for (int j = 0; j < code.length; j++) {
-      if (_cancelled) return;
+  /// 音送信: 計画全体をトーン波形（WAV）に合成して一括再生する。
+  /// resume/pause 方式と違いジッタがないため短い単位時間で送れる
+  Future<void> _sendAsTone() async {
+    final plan = _buildPlan();
+    final unitMs = state.soundUnitMs;
 
-      final onMs = (code[j] == '.' ? 1 : 3) * unitMs;
-      await _signalOn(mode);
-      await _sleep(onMs);
-      await _signalOff(mode);
+    final wav = synthesizeToneWav(plan, unitMs: unitMs);
+    final file = File(
+        '${Directory.systemTemp.path}/dengon_daikou_morse_tone.wav');
+    await file.writeAsBytes(wav, flush: true);
 
-      if (_cancelled) return;
+    final player = _dataPlayer ??= AudioPlayer();
+    await player.setReleaseMode(ReleaseMode.stop);
+    await player.play(DeviceFileSource(file.path));
 
-      // 記号間: 1単位 OFF（最後の記号の後はスキップ）
-      if (j < code.length - 1) {
-        await _sleep(unitMs);
-      }
+    // 再生の経過時間から送信位置（ハイライト・進捗）を更新しながら待つ
+    final cumulativeMs = <int>[];
+    var totalMs = 0;
+    for (final pulse in plan) {
+      totalMs += (pulse.onUnits + pulse.gapUnits) * unitMs;
+      cumulativeMs.add(totalMs);
     }
+
+    final startedAt = DateTime.now();
+    var index = 0;
+    while (!_cancelled) {
+      final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
+      if (elapsed >= totalMs) break;
+      while (index < plan.length - 1 && cumulativeMs[index] <= elapsed) {
+        index++;
+      }
+      final pulse = plan[index];
+      state = state.copyWith(
+        sendingCharIndex: pulse.charIndex,
+        sentBits: pulse.bitIndex != null ? pulse.bitIndex! + 1 : null,
+      );
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    await player.stop();
   }
 
   // キャンセル対応のスリープ（50ms チャンク単位でチェック）

@@ -107,11 +107,23 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                 onQualityChanged: vm.setImageQuality,
               ),
             const SizedBox(height: 16),
-            _SpeedSlider(
-              unitMs: state.unitMs,
-              enabled: !state.isSending,
-              onChanged: (ms) => vm.setUnitMs(ms),
-            ),
+            if (state.mode == SendMode.sound)
+              // 音はトーン波形の一括再生なので光より大幅に速くできる
+              _SpeedSlider(
+                unitMs: state.soundUnitMs,
+                minMs: kSoundMinUnitMs,
+                maxMs: kSoundMaxUnitMs,
+                enabled: !state.isSending,
+                onChanged: (ms) => vm.setSoundUnitMs(ms),
+              )
+            else
+              _SpeedSlider(
+                unitMs: state.unitMs,
+                minMs: kMinUnitMs,
+                maxMs: kMaxUnitMs,
+                enabled: !state.isSending,
+                onChanged: (ms) => vm.setUnitMs(ms),
+              ),
             const SizedBox(height: 8),
             _ModeSelector(
               mode: state.mode,
@@ -155,11 +167,15 @@ class _SendScreenState extends ConsumerState<SendScreen> {
 class _SpeedSlider extends StatelessWidget {
   const _SpeedSlider({
     required this.unitMs,
+    required this.minMs,
+    required this.maxMs,
     required this.enabled,
     required this.onChanged,
   });
 
   final int unitMs;
+  final int minMs;
+  final int maxMs;
   final bool enabled;
   final void Function(int ms) onChanged;
 
@@ -170,9 +186,9 @@ class _SpeedSlider extends StatelessWidget {
         Text('速度: ${unitMs}ms', style: Theme.of(context).textTheme.bodyMedium),
         Expanded(
           child: Slider(
-            min: kMinUnitMs.toDouble(),
-            max: kMaxUnitMs.toDouble(),
-            divisions: (kMaxUnitMs - kMinUnitMs) ~/ 10,
+            min: minMs.toDouble(),
+            max: maxMs.toDouble(),
+            divisions: (maxMs - minMs) ~/ 10,
             value: unitMs.toDouble(),
             onChanged: enabled ? (v) => onChanged(v.round()) : null,
           ),

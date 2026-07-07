@@ -6,6 +6,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>モールス信号の受信と送信画像の撮影にカメラを使用します</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>音（トーン）によるモールス信号の受信にマイクを使用します</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>送信する画像の選択に写真ライブラリを使用します</string>
 	<key>CFBundleDevelopmentRegion</key>

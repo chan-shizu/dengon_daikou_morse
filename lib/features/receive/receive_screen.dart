@@ -22,9 +22,16 @@ class ReceiveScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _CameraPreviewArea(
+            _SignalSelector(
+              signal: state.signal,
+              enabled: !state.isReceiving,
+              onChanged: vm.setSignal,
+            ),
+            const SizedBox(height: 12),
+            _SignalPreviewArea(
+              signal: state.signal,
               isReceiving: state.isReceiving,
-              isLightDetected: state.isLightDetected,
+              isDetected: state.isLightDetected,
               controller: vm.cameraController,
             ),
             if (state.errorMessage != null) ...[
@@ -70,37 +77,76 @@ class ReceiveScreen extends ConsumerWidget {
   }
 }
 
-class _CameraPreviewArea extends StatelessWidget {
-  const _CameraPreviewArea({
+class _SignalSelector extends StatelessWidget {
+  const _SignalSelector({
+    required this.signal,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final ReceiveSignal signal;
+  final bool enabled;
+  final void Function(ReceiveSignal signal) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<ReceiveSignal>(
+      segments: [
+        for (final s in ReceiveSignal.values)
+          ButtonSegment(value: s, label: Text(s.label)),
+      ],
+      selected: {signal},
+      onSelectionChanged:
+          enabled ? (selection) => onChanged(selection.first) : null,
+    );
+  }
+}
+
+/// 光受信ならカメラプレビュー、音受信ならマイクの状態表示
+class _SignalPreviewArea extends StatelessWidget {
+  const _SignalPreviewArea({
+    required this.signal,
     required this.isReceiving,
-    required this.isLightDetected,
+    required this.isDetected,
     required this.controller,
   });
 
+  final ReceiveSignal signal;
   final bool isReceiving;
-  final bool isLightDetected;
+  final bool isDetected;
   final CameraController? controller;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AspectRatio(
-      aspectRatio: 4 / 3,
+      aspectRatio: 4 / 2,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (isReceiving && controller != null)
+            if (signal == ReceiveSignal.light && isReceiving && controller != null)
               CameraPreview(controller!)
             else
               ColoredBox(
                 color: theme.colorScheme.surfaceContainerHighest,
-                child: const Center(
-                  child: Text('受信開始でカメラが起動します'),
+                child: Center(
+                  child: switch ((signal, isReceiving)) {
+                    (ReceiveSignal.light, _) => const Text('受信開始でカメラが起動します'),
+                    (ReceiveSignal.sound, false) =>
+                      const Text('受信開始でマイクが起動します'),
+                    (ReceiveSignal.sound, true) => Icon(
+                        Icons.mic,
+                        size: 48,
+                        color: isDetected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outline,
+                      ),
+                  },
                 ),
               ),
-            // 光検知インジケータ
+            // 信号検知インジケータ
             Positioned(
               top: 8,
               right: 8,
@@ -109,7 +155,7 @@ class _CameraPreviewArea extends StatelessWidget {
                 height: 20,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isLightDetected
+                  color: isDetected
                       ? Colors.yellow
                       : theme.colorScheme.outlineVariant,
                 ),
