@@ -1,9 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:audioplayers/audioplayers.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../core/constants.dart';
+import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_encoder.dart';
+import '../../core/morse/morse_image_codec.dart';
 import '../../core/morse/morse_protocol.dart';
 
 part 'send_view_model.g.dart';
@@ -21,6 +26,16 @@ enum SendMode {
   bool get usesSound => this != SendMode.light;
 }
 
+/// 送信する内容の種別
+enum SendContent {
+  text('テキスト'),
+  image('画像');
+
+  const SendContent(this.label);
+
+  final String label;
+}
+
 class SendState {
   const SendState({
     this.inputText = '',
@@ -30,6 +45,11 @@ class SendState {
     this.sendingCharIndex,
     this.mode = SendMode.light,
     this.language = MorseLanguage.japanese,
+    this.content = SendContent.text,
+    this.imageQuality = GrayImageQuality.medium,
+    this.image,
+    this.imagePayload = const [],
+    this.sentBits = 0,
   });
 
   final String inputText;
@@ -42,6 +62,28 @@ class SendState {
   final SendMode mode;
   final MorseLanguage language;
 
+  final SendContent content;
+  final GrayImageQuality imageQuality;
+
+  // 4階調変換済みの送信画像（未選択なら null）
+  final GrayImage? image;
+
+  // 画像の送信ビット列（メタ + 画素、反転適用済み）
+  final List<bool> imagePayload;
+
+  // 画像送信の進捗（送信済みビット数）
+  final int sentBits;
+
+  /// 画像の想定送信時間（ms）。画像未選択なら null
+  int? get estimatedImageMs => image == null
+      ? null
+      : MorseImageCodec.transmissionMs(imagePayload, unitMs);
+
+  bool get canSend => switch (content) {
+        SendContent.text => inputText.isNotEmpty,
+        SendContent.image => image != null,
+      };
+
   SendState copyWith({
     String? inputText,
     List<String?>? morseSequence,
@@ -50,6 +92,11 @@ class SendState {
     int? sendingCharIndex,
     SendMode? mode,
     MorseLanguage? language,
+    SendContent? content,
+    GrayImageQuality? imageQuality,
+    GrayImage? image,
+    List<bool>? imagePayload,
+    int? sentBits,
   }) {
     return SendState(
       inputText: inputText ?? this.inputText,
@@ -60,6 +107,11 @@ class SendState {
       sendingCharIndex: sendingCharIndex,
       mode: mode ?? this.mode,
       language: language ?? this.language,
+      content: content ?? this.content,
+      imageQuality: imageQuality ?? this.imageQuality,
+      image: image ?? this.image,
+      imagePayload: imagePayload ?? this.imagePayload,
+      sentBits: sentBits ?? this.sentBits,
     );
   }
 }
@@ -68,6 +120,9 @@ class SendState {
 class SendViewModel extends _$SendViewModel {
   bool _cancelled = false;
   AudioPlayer? _player;
+
+  // 画質変更時に変換し直すため、選択画像の元データを保持する
+  Uint8List? _sourceImageBytes;
 
   @override
   SendState build() {
@@ -100,17 +155,58 @@ class SendViewModel extends _$SendViewModel {
     );
   }
 
+  void setContent(SendContent content) {
+    state = state.copyWith(content: content);
+  }
+
+  /// 画像フォルダまたはカメラから画像を選び、4階調グレースケール化する
+  Future<void> pickImage(ImageSource source) async {
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      // 階調変換前の中間サイズ。これ以上の解像度は不要
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (picked == null) return;
+
+    final bytes = await picked.readAsBytes();
+    final image = convertToGrayImage(bytes, state.imageQuality);
+    if (image == null) return;
+
+    _sourceImageBytes = bytes;
+    state = state.copyWith(
+      image: image,
+      imagePayload: MorseImageCodec.encode(image),
+    );
+  }
+
+  void setImageQuality(GrayImageQuality quality) {
+    // 選択済みの元画像があれば新しい画質で変換し直す
+    final bytes = _sourceImageBytes;
+    final image = bytes == null ? null : convertToGrayImage(bytes, quality);
+    state = state.copyWith(
+      imageQuality: quality,
+      image: image,
+      imagePayload: image == null ? null : MorseImageCodec.encode(image),
+    );
+  }
+
   Future<void> startSending() async {
-    if (state.isSending || state.inputText.isEmpty) return;
+    if (state.isSending || !state.canSend) return;
     _cancelled = false;
-    state = state.copyWith(isSending: true);
+    state = state.copyWith(isSending: true, sentBits: 0);
 
     try {
       await WakelockPlus.enable();
       if (state.mode.usesSound) {
         await _preparePlayer();
       }
-      await _sendMorse();
+      switch (state.content) {
+        case SendContent.text:
+          await _sendMorse();
+        case SendContent.image:
+          await _sendImage();
+      }
     } catch (_) {
       // シミュレータ等でライトが使えない場合は無視
     } finally {
@@ -196,6 +292,34 @@ class SendViewModel extends _$SendViewModel {
     state = state.copyWith(sendingCharIndex: null);
     await _sleep(3 * unitMs);
     await _sendCode(language.endCode, mode, unitMs);
+  }
+
+  /// 画像送信: プリアンブル → 画像モード符号 → メタ+画素ビット列。
+  /// ビットは 0=点（1単位ON）/ 1=線（3単位ON）、ビット間は1単位OFF。
+  /// 受信側は画素数に達した時点で完了するため終了符号はない
+  Future<void> _sendImage() async {
+    final payload = state.imagePayload;
+    final unitMs = state.unitMs;
+    final mode = state.mode;
+
+    await _sendCode(kPreambleCode, mode, unitMs);
+    await _sleep(3 * unitMs);
+    await _sendCode(kImageStartCode, mode, unitMs);
+    await _sleep(3 * unitMs);
+
+    for (var i = 0; i < payload.length; i++) {
+      if (_cancelled) return;
+
+      await _signalOn(mode);
+      await _sleep((payload[i] ? 3 : 1) * unitMs);
+      await _signalOff(mode);
+
+      state = state.copyWith(sentBits: i + 1);
+
+      if (i < payload.length - 1) {
+        await _sleep(unitMs);
+      }
+    }
   }
 
   /// 符号1つ分（'.' と '-' の列）を記号間1単位 OFF で点滅させる

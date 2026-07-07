@@ -2,7 +2,9 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_decoder.dart';
+import '../../widgets/gray_image_view.dart';
 import 'receive_view_model.dart';
 
 class ReceiveScreen extends ConsumerWidget {
@@ -34,10 +36,12 @@ class ReceiveScreen extends ConsumerWidget {
             ],
             const SizedBox(height: 16),
             Expanded(
-              child: _DecodedTextView(
-                decodedText: state.decodedText,
-                currentSymbols: state.currentSymbols,
-              ),
+              child: state.image != null
+                  ? _ReceivedImageView(image: state.image!)
+                  : _DecodedTextView(
+                      decodedText: state.decodedText,
+                      currentSymbols: state.currentSymbols,
+                    ),
             ),
             const SizedBox(height: 12),
             _ProtocolStatus(state: state),
@@ -118,6 +122,36 @@ class _CameraPreviewArea extends StatelessWidget {
   }
 }
 
+/// 受信中の画像を左上から逐次表示する（未受信部分はグレー）
+class _ReceivedImageView extends StatelessWidget {
+  const _ReceivedImageView({required this.image});
+
+  final GrayImage image;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Expanded(child: Center(child: GrayImageView(image: image))),
+          const SizedBox(height: 8),
+          Text(
+            '${image.pixels.length} / ${image.pixelCount} 画素',
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DecodedTextView extends StatelessWidget {
   const _DecodedTextView({
     required this.decodedText,
@@ -178,17 +212,26 @@ class _ProtocolStatus extends StatelessWidget {
       ReceivePhase.waitingSignal => state.isReceiving
           ? (Icons.hourglass_empty, '開始合図を待っています…')
           : (Icons.info_outline, '受信開始で相手の開始合図を待ちます（速度は自動検出）'),
-      ReceivePhase.waitingLanguage => (
+      ReceivePhase.waitingHeader => (
           Icons.wifi_tethering,
-          '合図を検出（単位 ${state.detectedUnitMs}ms）— 言語符号待ち…',
+          '合図を検出（単位 ${state.detectedUnitMs}ms）— ヘッダー符号待ち…',
         ),
       ReceivePhase.receivingBody => (
           Icons.podcasts,
           '受信中: ${state.language?.label}（単位 ${state.detectedUnitMs}ms）',
         ),
+      ReceivePhase.receivingImageMeta => (
+          Icons.image_outlined,
+          '画像情報を受信中…（単位 ${state.detectedUnitMs}ms）',
+        ),
+      ReceivePhase.receivingImagePixels => (
+          Icons.image_outlined,
+          '画像受信中: ${state.image?.width}×${state.image?.height}'
+              '（単位 ${state.detectedUnitMs}ms）',
+        ),
       ReceivePhase.done => (
           Icons.check_circle_outline,
-          '受信完了（${state.language?.label}）',
+          state.image != null ? '画像の受信完了' : '受信完了（${state.language?.label}）',
         ),
     };
 

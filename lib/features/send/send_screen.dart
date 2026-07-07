@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/constants.dart';
+import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_encoder.dart';
+import '../../widgets/gray_image_view.dart';
 import 'send_view_model.dart';
 
 class SendScreen extends ConsumerStatefulWidget {
@@ -65,30 +68,44 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _LanguageSelector(
-              language: state.language,
+            _ContentSelector(
+              content: state.content,
               enabled: !state.isSending,
-              onChanged: _onLanguageChanged,
+              onChanged: vm.setContent,
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _textController,
-              enabled: !state.isSending,
-              inputFormatters: [
-                _LanguageInputFormatter(
-                  state.language,
-                  onRejected: () =>
-                      _showAlert(_rejectedInputMessage(state.language)),
-                ),
-              ],
-              decoration: InputDecoration(
-                labelText: '${state.language.label}テキスト',
-                border: const OutlineInputBorder(),
+            if (state.content == SendContent.text) ...[
+              _LanguageSelector(
+                language: state.language,
+                enabled: !state.isSending,
+                onChanged: _onLanguageChanged,
               ),
-              onChanged: vm.updateInput,
-            ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _textController,
+                enabled: !state.isSending,
+                inputFormatters: [
+                  _LanguageInputFormatter(
+                    state.language,
+                    onRejected: () =>
+                        _showAlert(_rejectedInputMessage(state.language)),
+                  ),
+                ],
+                decoration: InputDecoration(
+                  labelText: '${state.language.label}テキスト',
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: vm.updateInput,
+              ),
+            ] else
+              _ImagePickerRow(
+                enabled: !state.isSending,
+                quality: state.imageQuality,
+                onPick: vm.pickImage,
+                onQualityChanged: vm.setImageQuality,
+              ),
             const SizedBox(height: 16),
             _SpeedSlider(
               unitMs: state.unitMs,
@@ -104,19 +121,29 @@ class _SendScreenState extends ConsumerState<SendScreen> {
             const SizedBox(height: 12),
             _SendButton(
               isSending: state.isSending,
-              canSend: state.inputText.isNotEmpty,
+              canSend: state.canSend,
               onStart: () => vm.startSending(),
               onStop: vm.stopSending,
             ),
-            const SizedBox(height: 24),
-            const Text('変換結果', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             Expanded(
-              child: _MorseResultView(
-                inputText: state.inputText,
-                morseSequence: state.morseSequence,
-                sendingCharIndex: state.sendingCharIndex,
-              ),
+              child: state.content == SendContent.text
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('変換結果',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: _MorseResultView(
+                            inputText: state.inputText,
+                            morseSequence: state.morseSequence,
+                            sendingCharIndex: state.sendingCharIndex,
+                          ),
+                        ),
+                      ],
+                    )
+                  : _ImagePreview(state: state),
             ),
           ],
         ),
@@ -178,6 +205,136 @@ class _LanguageInputFormatter extends TextInputFormatter {
       text: filtered,
       selection: TextSelection.collapsed(offset: filtered.length),
     );
+  }
+}
+
+class _ContentSelector extends StatelessWidget {
+  const _ContentSelector({
+    required this.content,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final SendContent content;
+  final bool enabled;
+  final void Function(SendContent content) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<SendContent>(
+      segments: [
+        for (final c in SendContent.values)
+          ButtonSegment(value: c, label: Text(c.label)),
+      ],
+      selected: {content},
+      onSelectionChanged:
+          enabled ? (selection) => onChanged(selection.first) : null,
+    );
+  }
+}
+
+/// 画像の選択元（フォルダ/カメラ）と画質の選択
+class _ImagePickerRow extends StatelessWidget {
+  const _ImagePickerRow({
+    required this.enabled,
+    required this.quality,
+    required this.onPick,
+    required this.onQualityChanged,
+  });
+
+  final bool enabled;
+  final GrayImageQuality quality;
+  final void Function(ImageSource source) onPick;
+  final void Function(GrayImageQuality quality) onQualityChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: enabled ? () => onPick(ImageSource.gallery) : null,
+                icon: const Icon(Icons.photo_library),
+                label: const Text('フォルダ'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: enabled ? () => onPick(ImageSource.camera) : null,
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('カメラ'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SegmentedButton<GrayImageQuality>(
+          segments: [
+            for (final q in GrayImageQuality.values)
+              ButtonSegment(
+                value: q,
+                label: Text('${q.label} ${q.longSide}px'),
+              ),
+          ],
+          selected: {quality},
+          onSelectionChanged:
+              enabled ? (selection) => onQualityChanged(selection.first) : null,
+        ),
+      ],
+    );
+  }
+}
+
+/// 4階調変換後のプレビューと想定送信時間・送信進捗
+class _ImagePreview extends StatelessWidget {
+  const _ImagePreview({required this.state});
+
+  final SendState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final image = state.image;
+
+    if (image == null) {
+      return Center(
+        child: Text(
+          'フォルダまたはカメラから画像を選択してください',
+          style: TextStyle(color: theme.colorScheme.outline),
+        ),
+      );
+    }
+
+    final estimatedMs = state.estimatedImageMs!;
+    return Column(
+      children: [
+        Expanded(child: Center(child: GrayImageView(image: image))),
+        const SizedBox(height: 8),
+        Text(
+          '${image.width}×${image.height} / ${state.imagePayload.length}ビット / '
+          '想定送信時間 ${_formatDuration(estimatedMs)}',
+          style: theme.textTheme.bodyMedium,
+        ),
+        if (state.isSending) ...[
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: state.imagePayload.isEmpty
+                ? null
+                : state.sentBits / state.imagePayload.length,
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _formatDuration(int ms) {
+    final seconds = (ms / 1000).round();
+    final minutes = seconds ~/ 60;
+    return minutes > 0 ? '約$minutes分${seconds % 60}秒' : '約$seconds秒';
   }
 }
 

@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_decoder.dart';
 import '../../core/morse/morse_encoder.dart';
 
@@ -16,6 +18,7 @@ class ReceiveState {
     this.currentSymbols = '',
     this.phase = ReceivePhase.waitingSignal,
     this.language,
+    this.image,
     this.detectedUnitMs,
     this.isLightDetected = false,
     this.errorMessage,
@@ -30,8 +33,11 @@ class ReceiveState {
   // プロトコルの進行フェーズ
   final ReceivePhase phase;
 
-  // ヘッダーの言語符号で確定した言語（確定前は null）
+  // ヘッダーの言語符号で確定した言語（テキストモード以外は null）
   final MorseLanguage? language;
+
+  // 受信中/受信済みの画像（画像モード以外は null）。受信途中は部分画像
+  final GrayImage? image;
 
   // プリアンブルから自動検出した単位時間（検出前は null）
   final int? detectedUnitMs;
@@ -45,6 +51,7 @@ class ReceiveState {
     String? currentSymbols,
     ReceivePhase? phase,
     MorseLanguage? language,
+    GrayImage? image,
     int? detectedUnitMs,
     bool? isLightDetected,
     String? errorMessage,
@@ -55,6 +62,7 @@ class ReceiveState {
       currentSymbols: currentSymbols ?? this.currentSymbols,
       phase: phase ?? this.phase,
       language: language ?? this.language,
+      image: image ?? this.image,
       detectedUnitMs: detectedUnitMs ?? this.detectedUnitMs,
       isLightDetected: isLightDetected ?? this.isLightDetected,
       errorMessage: errorMessage,
@@ -68,6 +76,7 @@ class ReceiveViewModel extends _$ReceiveViewModel {
   LightSignalDetector? _detector;
   MorseDecoder? _decoder;
   int _lastEventMs = 0;
+  int _lastPixelCount = 0;
 
   /// View がプレビュー表示に使う（受信中のみ非 null）
   CameraController? get cameraController => _controller;
@@ -115,10 +124,15 @@ class ReceiveViewModel extends _$ReceiveViewModel {
         },
       );
       _lastEventMs = 0;
+      _lastPixelCount = 0;
 
       _controller = controller;
       await controller.startImageStream(_processFrame);
-      // フェーズ・言語・検出単位時間を初期状態に戻して受信開始
+      // 長時間の画像受信中にスリープしないようにする
+      try {
+        await WakelockPlus.enable();
+      } catch (_) {}
+      // フェーズ・言語・画像・検出単位時間を初期状態に戻して受信開始
       state = ReceiveState(isReceiving: true, decodedText: state.decodedText);
     } on CameraException catch (e) {
       await _disposeCamera();
@@ -137,6 +151,7 @@ class ReceiveViewModel extends _$ReceiveViewModel {
       isLightDetected: false,
       currentSymbols: '',
       phase: _decoder?.phase,
+      image: _decoder?.image,
     );
   }
 
@@ -168,12 +183,15 @@ class ReceiveViewModel extends _$ReceiveViewModel {
 
     if (detector.isOn != state.isLightDetected ||
         decoder.pendingSymbols != state.currentSymbols ||
-        decoder.phase != state.phase) {
+        decoder.phase != state.phase ||
+        decoder.receivedPixelCount != _lastPixelCount) {
+      _lastPixelCount = decoder.receivedPixelCount;
       state = state.copyWith(
         isLightDetected: detector.isOn,
         currentSymbols: decoder.pendingSymbols,
         phase: decoder.phase,
         language: decoder.language,
+        image: decoder.image,
         detectedUnitMs:
             decoder.phase == ReceivePhase.waitingSignal ? null : decoder.unitMs,
       );
@@ -214,6 +232,9 @@ class ReceiveViewModel extends _$ReceiveViewModel {
   }
 
   Future<void> _disposeCamera() async {
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
     final controller = _controller;
     _controller = null;
     if (controller != null) {

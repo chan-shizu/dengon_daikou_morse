@@ -1,4 +1,5 @@
 import '../constants.dart';
+import '../image/gray_image.dart';
 import 'morse_encoder.dart';
 import 'morse_protocol.dart';
 import 'morse_table.dart';
@@ -97,13 +98,19 @@ enum ReceivePhase {
   /// 開始合図（プリアンブル）待ち
   waitingSignal,
 
-  /// 言語符号待ち
-  waitingLanguage,
+  /// ヘッダー符号（言語符号 or 画像モード符号）待ち
+  waitingHeader,
 
-  /// 本文受信中
+  /// テキスト本文受信中
   receivingBody,
 
-  /// 終了符号を受信して完了
+  /// 画像メタデータ（幅・高さ・反転フラグ）受信中
+  receivingImageMeta,
+
+  /// 画像の画素ビット受信中
+  receivingImagePixels,
+
+  /// 終了符号（または画像の全画素）を受信して完了
   done,
 }
 
@@ -130,9 +137,18 @@ class MorseDecoder {
   // 先頭や連続のスペースを出さないためのフラグ
   bool _lastWasSpace = true;
 
+  // 画像モード
+  final List<bool> _imageMetaBits = [];
+  int? _imageWidth;
+  int? _imageHeight;
+  bool _imageInverted = false;
+  // 1画素（2bit）分のビットバッファと確定済み画素レベル（0〜3）
+  final List<bool> _pixelBitBuffer = [];
+  final List<int> _imagePixels = [];
+
   ReceivePhase get phase => _phase;
 
-  /// ヘッダーの言語符号で確定した言語（確定前は null）
+  /// ヘッダーの言語符号で確定した言語（テキストモード以外は null）
   MorseLanguage? get language => _language;
 
   /// プリアンブルから校正した単位時間（校正前はデフォルト値）
@@ -141,13 +157,32 @@ class MorseDecoder {
   /// 確定前の符号バッファ（UI表示用）
   String get pendingSymbols => _symbols.toString();
 
+  /// 受信済みの画素数（画像モード以外は 0）
+  int get receivedPixelCount => _imagePixels.length;
+
+  /// 受信中/受信済みの画像（画像モード以外は null）。
+  /// 受信途中は先頭から途中までの部分画像を返す
+  GrayImage? get image {
+    final width = _imageWidth;
+    final height = _imageHeight;
+    if (width == null || height == null) return null;
+    return GrayImage(
+      width: width,
+      height: height,
+      pixels: List.unmodifiable(_imagePixels),
+    );
+  }
+
   void onSignal(SignalEvent event) {
     switch (_phase) {
       case ReceivePhase.waitingSignal:
         _onPreambleSignal(event);
-      case ReceivePhase.waitingLanguage:
+      case ReceivePhase.waitingHeader:
       case ReceivePhase.receivingBody:
         _onCodeSignal(event);
+      case ReceivePhase.receivingImageMeta:
+      case ReceivePhase.receivingImagePixels:
+        _onImageBitSignal(event);
       case ReceivePhase.done:
         break;
     }
@@ -174,7 +209,7 @@ class MorseDecoder {
     if (event.durationMs >= _median(_preambleOnMs) * 2) {
       if (_preambleOnMs.length >= kPreambleMinDots) {
         _unitMs = _median(_preambleOnMs);
-        _phase = ReceivePhase.waitingLanguage;
+        _phase = ReceivePhase.waitingHeader;
       }
       _preambleOnMs.clear();
     }
@@ -207,8 +242,12 @@ class MorseDecoder {
     _symbols.clear();
 
     switch (_phase) {
-      case ReceivePhase.waitingLanguage:
-        // 言語符号以外はノイズとして読み捨てる
+      case ReceivePhase.waitingHeader:
+        // 言語符号・画像モード符号以外はノイズとして読み捨てる
+        if (code == kImageStartCode) {
+          _phase = ReceivePhase.receivingImageMeta;
+          return;
+        }
         for (final lang in MorseLanguage.values) {
           if (code == lang.startCode) {
             _language = lang;
@@ -229,9 +268,57 @@ class MorseDecoder {
         onCharacter(table[code] ?? '?');
         _lastWasSpace = false;
       case ReceivePhase.waitingSignal:
+      case ReceivePhase.receivingImageMeta:
+      case ReceivePhase.receivingImagePixels:
       case ReceivePhase.done:
         break;
     }
+  }
+
+  /// 画像モード: ON 1回 = 1ビット（1単位=0、3単位=1）。
+  /// OFF の長さは区切りに使わないため任意
+  void _onImageBitSignal(SignalEvent event) {
+    if (event.isOn) return;
+    final bit = event.durationMs >= 2 * _unitMs;
+
+    if (_phase == ReceivePhase.receivingImageMeta) {
+      _imageMetaBits.add(bit);
+      if (_imageMetaBits.length < kImageMetaBits) return;
+
+      final width = _bitsToInt(_imageMetaBits, 0);
+      final height = _bitsToInt(_imageMetaBits, kImageDimensionBits);
+      if (width == 0 || height == 0) {
+        // メタデータが壊れている: 受信を打ち切る
+        _phase = ReceivePhase.done;
+        return;
+      }
+      _imageWidth = width;
+      _imageHeight = height;
+      _imageInverted = _imageMetaBits[kImageDimensionBits * 2];
+      _phase = ReceivePhase.receivingImagePixels;
+      return;
+    }
+
+    _pixelBitBuffer.add(bit != _imageInverted);
+    if (_pixelBitBuffer.length < kGrayBitsPerPixel) return;
+
+    var level = 0;
+    for (final b in _pixelBitBuffer) {
+      level = (level << 1) | (b ? 1 : 0);
+    }
+    _pixelBitBuffer.clear();
+    _imagePixels.add(level);
+    if (_imagePixels.length >= _imageWidth! * _imageHeight!) {
+      _phase = ReceivePhase.done;
+    }
+  }
+
+  static int _bitsToInt(List<bool> bits, int start) {
+    var value = 0;
+    for (var i = 0; i < kImageDimensionBits; i++) {
+      value = (value << 1) | (bits[start + i] ? 1 : 0);
+    }
+    return value;
   }
 
   static int _median(List<int> values) {

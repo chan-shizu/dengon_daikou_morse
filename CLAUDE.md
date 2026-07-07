@@ -115,7 +115,9 @@ flutter test     # テスト実行
 | `riverpod_annotation` | `@riverpod` アノテーション | dependencies |
 | `torch_light` | 背面ライトON/OFF制御 | dependencies |
 | `camera` | カメラフレームストリーム取得 | dependencies |
-| `wakelock_plus` | 送信中のスリープ防止 | dependencies |
+| `wakelock_plus` | 送受信中のスリープ防止 | dependencies |
+| `image_picker` | 送信画像の選択（フォルダ/カメラ） | dependencies |
+| `image` | 画像の縮小・階調変換 | dependencies |
 | `riverpod_generator` | コード生成 | dev_dependencies |
 | `build_runner` | コード生成実行 | dev_dependencies |
 
@@ -136,13 +138,22 @@ flutter test     # テスト実行
 送信は以下の順で点滅する。定義は `lib/core/morse/morse_protocol.dart`、受信側は `MorseDecoder` の状態機械（`ReceivePhase`）で位置ごとに解釈する:
 
 1. **プリアンブル** `........`（点8連打）— 受信側の閾値安定と単位時間の自動校正用
-2. **言語符号** — 和文: ホレ `-..---` / 欧文: CT `-.-.-`
-3. **本文**
-4. **終了符号** — 和文: ラタ `...-.` / 欧文: AR `.-.-.`
+2. **ヘッダー符号** — 和文: ホレ `-..---` / 欧文: CT `-.-.-` / 画像: BT `-...-`
+3. **本文**（テキスト or 画像ビット列）
+4. **終了符号**（テキストのみ）— 和文: ラタ `...-.` / 欧文: AR `.-.-.`
 
 - 受信側の単位時間はプリアンブルの点の長さ（中央値）から自動検出するため、速度スライダーは送信側のみ
-- 言語符号・終了符号は文字表と衝突するものがある（CT=サ、AR=ン）ため、必ず状態機械の位置で解釈する
+- ヘッダー・終了符号は文字表と衝突するものがある（CT=サ、AR=ン）ため、必ず状態機械の位置で解釈する
 - 逆引き表は言語別（`kJapaneseMorseTableReverse` / `kEnglishMorseTableReverse`）。言語符号で確定してから選ぶ
+
+### 画像送信（`morse_image_codec.dart` / `gray_image.dart`）
+
+- 画像は縮小 + Floyd–Steinberg ディザで**2bit=4階調グレースケール化**（画質 = 長辺画素数: 低24 / 中32 / 高48）
+- ビット列 = メタ17bit（幅8 + 高さ8 + 反転フラグ1）+ 画素×2bit（左上から行順、レベル0=黒〜3=白、MSB先行）
+- ビットの点滅は 0=点（1単位ON）/ 1=線（3単位ON）、ビット間1単位OFF。OFF の長さは区切りに使わない
+- 線は点の2倍の時間がかかるため、1が過半のビット列は全ビット反転して送信（レベル→3-レベルと等価。反転フラグで受信側が復元）
+- 終了符号はなく、受信側は幅×高さの画素数に達した時点で完了 → カメラ自動停止
+- 受信側は画素が届くたびに左上から逐次描画（`GrayImageView`、未受信部分はブルーグレー）
 
 ### 受信の制約
 
@@ -162,4 +173,5 @@ flutter test     # テスト実行
 - [x] モールスデコーダー（`morse_decoder.dart`）
 - [x] 受信ViewModel / 受信UI
 - [x] 通信プロトコル（開始合図・言語符号・終了符号・単位時間の自動校正）
+- [x] 画像送受信（4階調ディザ変換・画質選択・想定送信時間・逐次表示）
 - [ ] 実機2台での送受信テスト（閾値・ROI調整）
