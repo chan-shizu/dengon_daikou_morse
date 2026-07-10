@@ -65,6 +65,12 @@ flutter:
     - family: NotoSansJP
       fonts:
         - asset: assets/fonts/NotoSansJP.ttf
+    # 7セグ/14セグ風の計器フォント（英数字・記号のみ。SIL OFL）
+    - family: DSEG14
+      fonts:
+        - asset: assets/fonts/DSEG14Classic-Regular.ttf
+        - asset: assets/fonts/DSEG14Classic-Bold.ttf
+          weight: 700
 
   # To add assets to your application, add an assets section, like this:
   # assets:

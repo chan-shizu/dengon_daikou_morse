@@ -6,6 +6,9 @@ ios:
 ipad-device:
 	flutter run -d 00008030-001A40301E88C02E
 
+iPhone-se-device:
+	flutter run -d 00008110-000C64CC2268401E
+
 android:
 	flutter run -d android
 

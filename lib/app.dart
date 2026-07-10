@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'features/receive/receive_screen.dart';
 import 'features/receive/receive_view_model.dart';
 import 'features/send/send_screen.dart';
+import 'theme/app_theme.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -12,10 +13,7 @@ class App extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'モールス伝言代行',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        fontFamily: 'NotoSansJP',
-      ),
+      theme: buildGadgetTheme(),
       home: const HomeShell(),
     );
   }
@@ -51,8 +49,8 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           setState(() => _index = index);
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.flash_on), label: '送信'),
-          NavigationDestination(icon: Icon(Icons.videocam), label: '受信'),
+          NavigationDestination(icon: Icon(Icons.flash_on), label: 'TX 送信'),
+          NavigationDestination(icon: Icon(Icons.settings_input_antenna), label: 'RX 受信'),
         ],
       ),
     );

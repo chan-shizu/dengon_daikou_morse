@@ -56,7 +56,7 @@ void main() {
     testWidgets('停止状態', (tester) async {
       await _pumpApp(tester, const ProviderScope(child: App()));
 
-      await tester.tap(find.text('受信'));
+      await tester.tap(find.text('RX 受信'));
       await tester.pumpAndSettle();
 
       await expectLater(

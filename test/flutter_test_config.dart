@@ -6,10 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final fontLoader = FontLoader('NotoSansJP');
-  final fontData = File('assets/fonts/NotoSansJP.ttf').readAsBytesSync();
-  fontLoader.addFont(Future.value(ByteData.view(fontData.buffer)));
-  await fontLoader.load();
+  Future<void> loadFont(String family, List<String> assets) async {
+    final loader = FontLoader(family);
+    for (final asset in assets) {
+      final data = File(asset).readAsBytesSync();
+      loader.addFont(Future.value(ByteData.view(data.buffer)));
+    }
+    await loader.load();
+  }
+
+  await loadFont('NotoSansJP', ['assets/fonts/NotoSansJP.ttf']);
+  await loadFont('DSEG14', [
+    'assets/fonts/DSEG14Classic-Regular.ttf',
+    'assets/fonts/DSEG14Classic-Bold.ttf',
+  ]);
 
   await testMain();
 }

@@ -44,8 +44,18 @@ lib/
       receive_screen.dart           # View
       receive_view_model.dart       # ViewModel
       receive_view_model.g.dart     # 生成コード（編集不要）
+  theme/
+    app_theme.dart                  # 無線機風テーマ（GadgetColors / GadgetTextStyles / ThemeData）
   widgets/                          # 複数featureで共有するWidget
+    gadget/                         # 無線機風の共通部品（Panel / LcdDisplay / Led / Button）
 ```
+
+### デザイン規約（無線機・トランシーバー風）
+
+- ダーク筐体 + アンバー発光（`GadgetColors.amber`）で統一。色は直接指定せず `GadgetColors` を使う
+- LCD表示の英数字・記号・モールス符号は DSEG14 フォント（`GadgetTextStyles.lcd`）、日本語は NotoSansJP（`.lcdJa`）
+- セクションは `GadgetPanel`（英字銘板ラベル付き）、表示エリアは `LcdDisplay`、主操作は `GadgetButton`、状態は `LedIndicator`
+- ゴールデンテストで DSEG を描画するには `flutter_test_config.dart` でのフォントロードが必要（設定済み）
 
 ### 実装方針
 

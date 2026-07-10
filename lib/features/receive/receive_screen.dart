@@ -4,6 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_decoder.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/gadget/gadget_button.dart';
+import '../../widgets/gadget/gadget_panel.dart';
+import '../../widgets/gadget/lcd_display.dart';
+import '../../widgets/gadget/led_indicator.dart';
 import '../../widgets/gray_image_view.dart';
 import 'receive_view_model.dart';
 
@@ -16,32 +21,43 @@ class ReceiveScreen extends ConsumerWidget {
     final vm = ref.read(receiveViewModelProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('モールス受信')),
+      appBar: AppBar(
+        title: const Text('モールス受信'),
+        actions: const [_PlateBadge('RX')],
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SignalSelector(
-              signal: state.signal,
-              enabled: !state.isReceiving,
-              onChanged: vm.setSignal,
-            ),
-            const SizedBox(height: 12),
-            _SignalPreviewArea(
-              signal: state.signal,
-              isReceiving: state.isReceiving,
-              isDetected: state.isLightDetected,
-              controller: vm.cameraController,
+            GadgetPanel(
+              label: 'SIGNAL SOURCE',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _SignalSelector(
+                    signal: state.signal,
+                    enabled: !state.isReceiving,
+                    onChanged: vm.setSignal,
+                  ),
+                  const SizedBox(height: 10),
+                  _SignalPreviewArea(
+                    signal: state.signal,
+                    isReceiving: state.isReceiving,
+                    isDetected: state.isLightDetected,
+                    controller: vm.cameraController,
+                  ),
+                ],
+              ),
             ),
             if (state.errorMessage != null) ...[
               const SizedBox(height: 8),
               Text(
                 state.errorMessage!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                style: const TextStyle(color: GadgetColors.red),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             Expanded(
               child: state.image != null
                   ? _ReceivedImageView(image: state.image!)
@@ -50,17 +66,26 @@ class ReceiveScreen extends ConsumerWidget {
                       currentSymbols: state.currentSymbols,
                     ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _ProtocolStatus(state: state),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
-                  child: _ReceiveButton(
-                    isReceiving: state.isReceiving,
-                    onStart: () => vm.startReceiving(),
-                    onStop: () => vm.stopReceiving(),
-                  ),
+                  child: state.isReceiving
+                      ? GadgetButton(
+                          label: '停止',
+                          subLabel: 'STOP',
+                          icon: Icons.stop,
+                          color: GadgetColors.red,
+                          onPressed: () => vm.stopReceiving(),
+                        )
+                      : GadgetButton(
+                          label: '受信開始',
+                          subLabel: 'RECEIVE',
+                          icon: Icons.settings_input_antenna,
+                          onPressed: () => vm.startReceiving(),
+                        ),
                 ),
                 const SizedBox(width: 8),
                 IconButton.outlined(
@@ -71,6 +96,26 @@ class ReceiveScreen extends ConsumerWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// AppBar 右端の銘板バッジ（TX/RX）
+class _PlateBadge extends StatelessWidget {
+  const _PlateBadge(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Center(
+        child: Text(
+          text,
+          style: GadgetTextStyles.lcd.copyWith(fontSize: 18),
         ),
       ),
     );
@@ -102,7 +147,7 @@ class _SignalSelector extends StatelessWidget {
   }
 }
 
-/// 光受信ならカメラプレビュー、音受信ならマイクの状態表示
+/// 光受信ならカメラプレビュー、音受信ならマイクの状態表示（モニター風ベゼル）
 class _SignalPreviewArea extends StatelessWidget {
   const _SignalPreviewArea({
     required this.signal,
@@ -118,51 +163,56 @@ class _SignalPreviewArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return AspectRatio(
       aspectRatio: 4 / 2,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (signal == ReceiveSignal.light && isReceiving && controller != null)
-              CameraPreview(controller!)
-            else
-              ColoredBox(
-                color: theme.colorScheme.surfaceContainerHighest,
-                child: Center(
-                  child: switch ((signal, isReceiving)) {
-                    (ReceiveSignal.light, _) => const Text('受信開始でカメラが起動します'),
-                    (ReceiveSignal.sound, false) =>
-                      const Text('受信開始でマイクが起動します'),
-                    (ReceiveSignal.sound, true) => Icon(
-                        Icons.mic,
-                        size: 48,
-                        color: isDetected
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.outline,
-                      ),
-                  },
-                ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (signal == ReceiveSignal.light && isReceiving && controller != null)
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: GadgetColors.bezelDark, width: 2),
               ),
-            // 信号検知インジケータ
-            Positioned(
-              top: 8,
-              right: 8,
-              child: Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDetected
-                      ? Colors.yellow
-                      : theme.colorScheme.outlineVariant,
-                ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: CameraPreview(controller!),
+              ),
+            )
+          else
+            LcdDisplay(
+              child: Center(
+                child: switch ((signal, isReceiving)) {
+                  (ReceiveSignal.light, _) => const Text(
+                      '受信開始でカメラが起動します',
+                      style: TextStyle(color: GadgetColors.amberDim),
+                    ),
+                  (ReceiveSignal.sound, false) => const Text(
+                      '受信開始でマイクが起動します',
+                      style: TextStyle(color: GadgetColors.amberDim),
+                    ),
+                  (ReceiveSignal.sound, true) => Icon(
+                      Icons.mic,
+                      size: 48,
+                      color: isDetected
+                          ? GadgetColors.amber
+                          : GadgetColors.amberDim,
+                      shadows: isDetected
+                          ? const [
+                              Shadow(color: Color(0x99FFB000), blurRadius: 12)
+                            ]
+                          : null,
+                    ),
+                },
               ),
             ),
-          ],
-        ),
+          // 信号検知LED
+          Positioned(
+            top: 8,
+            right: 8,
+            child: LedIndicator(isOn: isDetected, label: 'SIG'),
+          ),
+        ],
       ),
     );
   }
@@ -176,21 +226,14 @@ class _ReceivedImageView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return LcdDisplay(
       child: Column(
         children: [
           Expanded(child: Center(child: GrayImageView(image: image))),
           const SizedBox(height: 8),
           Text(
             '${image.pixels.length} / ${image.pixelCount} 画素',
-            style: theme.textTheme.bodyMedium,
+            style: GadgetTextStyles.lcdJa.copyWith(fontSize: 12),
           ),
         ],
       ),
@@ -209,34 +252,26 @@ class _DecodedTextView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              decodedText.isEmpty ? '受信したテキストが表示されます' : decodedText,
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: decodedText.isEmpty
-                    ? theme.colorScheme.outline
-                    : theme.colorScheme.onSurface,
-              ),
-            ),
-            if (currentSymbols.isNotEmpty)
+    return LcdDisplay(
+      child: SizedBox(
+        width: double.infinity,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                currentSymbols,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: theme.colorScheme.primary,
-                ),
+                decodedText.isEmpty ? '受信したテキストが表示されます' : decodedText,
+                style: decodedText.isEmpty
+                    ? const TextStyle(color: GadgetColors.amberDim)
+                    : GadgetTextStyles.lcdJa.copyWith(fontSize: 22),
               ),
-          ],
+              if (currentSymbols.isNotEmpty)
+                Text(
+                  currentSymbols,
+                  style: GadgetTextStyles.lcd.copyWith(fontSize: 16),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -252,70 +287,43 @@ class _ProtocolStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    final (icon, text) = switch (state.phase) {
+    final text = switch (state.phase) {
       ReceivePhase.waitingSignal => state.isReceiving
-          ? (Icons.hourglass_empty, '開始合図を待っています…')
-          : (Icons.info_outline, '受信開始で相手の開始合図を待ちます（速度は自動検出）'),
-      ReceivePhase.waitingHeader => (
-          Icons.wifi_tethering,
-          '合図を検出（単位 ${state.detectedUnitMs}ms）— ヘッダー符号待ち…',
-        ),
-      ReceivePhase.receivingBody => (
-          Icons.podcasts,
-          '受信中: ${state.language?.label}（単位 ${state.detectedUnitMs}ms）',
-        ),
-      ReceivePhase.receivingImageMeta => (
-          Icons.image_outlined,
-          '画像情報を受信中…（単位 ${state.detectedUnitMs}ms）',
-        ),
-      ReceivePhase.receivingImagePixels => (
-          Icons.image_outlined,
-          '画像受信中: ${state.image?.width}×${state.image?.height}'
-              '（単位 ${state.detectedUnitMs}ms）',
-        ),
-      ReceivePhase.done => (
-          Icons.check_circle_outline,
-          state.image != null ? '画像の受信完了' : '受信完了（${state.language?.label}）',
-        ),
+          ? '開始合図を待っています…'
+          : '受信開始で相手の開始合図を待ちます（速度は自動検出）',
+      ReceivePhase.waitingHeader =>
+        '合図を検出（単位 ${state.detectedUnitMs}ms）— ヘッダー符号待ち…',
+      ReceivePhase.receivingBody =>
+        '受信中: ${state.language?.label}（単位 ${state.detectedUnitMs}ms）',
+      ReceivePhase.receivingImageMeta =>
+        '画像情報を受信中…（単位 ${state.detectedUnitMs}ms）',
+      ReceivePhase.receivingImagePixels =>
+        '画像受信中: ${state.image?.width}×${state.image?.height}'
+            '（単位 ${state.detectedUnitMs}ms）',
+      ReceivePhase.done =>
+        state.image != null ? '画像の受信完了' : '受信完了（${state.language?.label}）',
     };
 
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: theme.colorScheme.primary),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text, style: theme.textTheme.bodyMedium),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReceiveButton extends StatelessWidget {
-  const _ReceiveButton({
-    required this.isReceiving,
-    required this.onStart,
-    required this.onStop,
-  });
-
-  final bool isReceiving;
-  final VoidCallback onStart;
-  final VoidCallback onStop;
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton.icon(
-      onPressed: isReceiving ? onStop : onStart,
-      style: isReceiving
-          ? ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            )
-          : null,
-      icon: Icon(isReceiving ? Icons.stop : Icons.videocam),
-      label: Text(isReceiving ? '停止' : '受信開始'),
+    return GadgetPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          LedIndicator(
+            isOn: state.isReceiving || state.phase == ReceivePhase.done,
+            label: 'RX',
+            onColor: state.phase == ReceivePhase.done
+                ? const Color(0xFF4CD964)
+                : GadgetColors.amber,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFB9C2CC)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
