@@ -1,7 +1,10 @@
-.PHONY: ios android gen build-ios build-android clean
+.PHONY: ios ios-sim android gen build-ios build-android clean
 
 ios:
 	flutter run -d iphone
+
+ios-sim:
+	flutter run -d "iPhone SE"
 
 ipad-device:
 	flutter run -d 00008030-001A40301E88C02E
