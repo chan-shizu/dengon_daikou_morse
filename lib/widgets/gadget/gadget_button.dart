@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
-/// 押し込み感のある大型の物理ボタン風。送信/受信の主操作に使う。
+/// ステッカー風の大型ボタン。送信/受信の主操作に使う。
 class GadgetButton extends StatelessWidget {
   const GadgetButton({
     super.key,
@@ -10,12 +10,12 @@ class GadgetButton extends StatelessWidget {
     this.subLabel,
     required this.icon,
     required this.onPressed,
-    this.color = GadgetColors.amber,
+    this.color = GadgetColors.accent,
   });
 
   final String label;
 
-  /// 銘板の刻印風の英字サブラベル
+  /// 英字のサブラベル
   final String? subLabel;
   final IconData icon;
   final VoidCallback? onPressed;
@@ -25,36 +25,24 @@ class GadgetButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
     final face = enabled ? color : GadgetColors.ledOff;
-    final onFace = enabled ? Colors.black : GadgetColors.bezelDark;
+    final onFace = enabled ? GadgetColors.ink : GadgetColors.label;
 
     return Material(
       color: Colors.transparent,
       child: Ink(
         height: 56,
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color.lerp(face, Colors.white, 0.15)!,
-              face,
-              Color.lerp(face, Colors.black, 0.25)!,
-            ],
-          ),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: GadgetColors.bezelDark, width: 2),
+          color: face,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: GadgetColors.ink, width: 2),
           boxShadow: enabled
               ? const [
-                  BoxShadow(
-                    color: Color(0x66000000),
-                    offset: Offset(0, 3),
-                    blurRadius: 4,
-                  ),
+                  BoxShadow(color: GadgetColors.ink, offset: Offset(0, 4)),
                 ]
               : null,
         ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           onTap: onPressed,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -66,7 +54,7 @@ class GadgetButton extends StatelessWidget {
                 style: TextStyle(
                   color: onFace,
                   fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w800,
                   letterSpacing: 1,
                 ),
               ),

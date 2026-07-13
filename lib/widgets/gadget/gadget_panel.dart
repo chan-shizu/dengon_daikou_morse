@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
-/// 面取りベゼル付きのセクションパネル。
-/// 上・左を明るく、下・右を暗くして筐体から盛り上がって見せる。
+/// ステッカー風のセクションカード。
+/// 白い面に太いアウトラインとオフセット影で背景から浮かせる。
 class GadgetPanel extends StatelessWidget {
   const GadgetPanel({
     super.key,
@@ -12,7 +12,7 @@ class GadgetPanel extends StatelessWidget {
     required this.child,
   });
 
-  /// 銘板風の刻印ラベル（英字想定）
+  /// カードの見出しラベル（英字想定）
   final String? label;
   final EdgeInsetsGeometry padding;
   final Widget child;
@@ -20,25 +20,16 @@ class GadgetPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      // 左上→右下のグラデーション縁で面取りベゼルを表現する
-      // （角丸では辺ごとの Border 色分けが使えないため）
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [GadgetColors.bezelLight, GadgetColors.bezelDark],
-        ),
-        borderRadius: BorderRadius.circular(8),
+        color: GadgetColors.panel,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: GadgetColors.ink, width: 2),
+        boxShadow: const [
+          BoxShadow(color: GadgetColors.ink, offset: Offset(0, 4)),
+        ],
       ),
-      padding: const EdgeInsets.all(1.5),
-      child: Container(
-        decoration: BoxDecoration(
-          color: GadgetColors.panel,
-          borderRadius: BorderRadius.circular(6.5),
-        ),
-        padding: padding,
-        child: _buildContent(),
-      ),
+      padding: padding,
+      child: _buildContent(),
     );
   }
 

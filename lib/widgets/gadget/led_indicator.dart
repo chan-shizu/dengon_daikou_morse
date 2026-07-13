@@ -8,7 +8,7 @@ class LedIndicator extends StatelessWidget {
     super.key,
     required this.isOn,
     required this.label,
-    this.onColor = GadgetColors.amber,
+    this.onColor = GadgetColors.accent,
   });
 
   final bool isOn;
@@ -28,7 +28,7 @@ class LedIndicator extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: isOn ? onColor : GadgetColors.ledOff,
-            border: Border.all(color: GadgetColors.bezelDark),
+            border: Border.all(color: GadgetColors.ink, width: 1.5),
             boxShadow: isOn
                 ? [BoxShadow(color: onColor.withValues(alpha: 0.7), blurRadius: 8)]
                 : null,

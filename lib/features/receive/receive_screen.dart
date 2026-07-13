@@ -172,7 +172,7 @@ class _SignalPreviewArea extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: GadgetColors.bezelDark, width: 2),
+                border: Border.all(color: GadgetColors.ink, width: 2),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
@@ -185,18 +185,18 @@ class _SignalPreviewArea extends StatelessWidget {
                 child: switch ((signal, isReceiving)) {
                   (ReceiveSignal.light, _) => const Text(
                       '受信開始でカメラが起動します',
-                      style: TextStyle(color: GadgetColors.amberDim),
+                      style: TextStyle(color: GadgetColors.accentDim),
                     ),
                   (ReceiveSignal.sound, false) => const Text(
                       '受信開始でマイクが起動します',
-                      style: TextStyle(color: GadgetColors.amberDim),
+                      style: TextStyle(color: GadgetColors.accentDim),
                     ),
                   (ReceiveSignal.sound, true) => Icon(
                       Icons.mic,
                       size: 48,
                       color: isDetected
-                          ? GadgetColors.amber
-                          : GadgetColors.amberDim,
+                          ? GadgetColors.accent
+                          : GadgetColors.accentDim,
                       shadows: isDetected
                           ? const [
                               Shadow(color: Color(0x99FFB000), blurRadius: 12)
@@ -262,7 +262,7 @@ class _DecodedTextView extends StatelessWidget {
               Text(
                 decodedText.isEmpty ? '受信したテキストが表示されます' : decodedText,
                 style: decodedText.isEmpty
-                    ? const TextStyle(color: GadgetColors.amberDim)
+                    ? const TextStyle(color: GadgetColors.accentDim)
                     : GadgetTextStyles.lcdJa.copyWith(fontSize: 22),
               ),
               if (currentSymbols.isNotEmpty)
@@ -313,7 +313,7 @@ class _ProtocolStatus extends StatelessWidget {
             label: 'RX',
             onColor: state.phase == ReceivePhase.done
                 ? const Color(0xFF4CD964)
-                : GadgetColors.amber,
+                : GadgetColors.accent,
           ),
           const SizedBox(width: 12),
           Expanded(

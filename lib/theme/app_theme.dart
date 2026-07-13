@@ -1,77 +1,79 @@
 import 'package:flutter/material.dart';
 
-/// 無線機・トランシーバー風テーマの配色。
-/// ダークな筐体にアンバー（琥珀色）の発光表示で統一する。
+/// ポップデザインの配色。アプリアイコンのシアン×イエローを基調に、
+/// 白いカードと太い暗色アウトラインでステッカー風に仕上げる。
 abstract final class GadgetColors {
-  /// 筐体（画面全体の背景）
-  static const chassis = Color(0xFF15181C);
+  /// 画面全体の背景 — アイコンの背景と同じシアン
+  static const chassis = Color(0xFF0CC0DF);
 
-  /// パネル面（セクションの下地）
-  static const panel = Color(0xFF23272D);
+  /// カード面（セクションの下地）
+  static const panel = Color(0xFFFFFFFF);
 
-  /// ベゼルの受光側/影側（面取りの立体感）
-  static const bezelLight = Color(0xFF3D444D);
-  static const bezelDark = Color(0xFF0A0C0E);
+  /// アウトライン・本文テキストの暗色（ディスプレイの地色と共通）
+  static const ink = Color(0xFF0B3A46);
 
-  /// LCD の地色（わずかに暖色の黒）
-  static const lcdBackground = Color(0xFF120E06);
+  /// ディスプレイの地色（暗いティール）
+  static const lcdBackground = Color(0xFF0B3A46);
 
-  /// アンバー発光（点灯）と消灯セグメント
-  static const amber = Color(0xFFFFB000);
-  static const amberDim = Color(0xFF453208);
+  /// イエロー発光（点灯）と消灯セグメント — アイコンのモールス符号と同色
+  static const accent = Color(0xFFFFDE59);
+  static const accentDim = Color(0xFF48634B);
 
-  /// LED の消灯色
-  static const ledOff = Color(0xFF3A3428);
+  /// LED・ボタンの無効色（白カード上のグレー）
+  static const ledOff = Color(0xFFC9DDE2);
 
   /// エラー・停止系の赤
-  static const red = Color(0xFFFF4136);
+  static const red = Color(0xFFFF5A5F);
 
-  /// 銘板の刻印ラベル
-  static const label = Color(0xFF8D97A3);
+  /// カード上のラベル（くすんだティール）
+  static const label = Color(0xFF48808F);
+
+  /// 暗い下地（ディスプレイ）上のラベル
+  static const labelOnDark = Color(0xFF7FC4D4);
 }
 
-/// LCD・銘板用のテキストスタイル
+/// ディスプレイ・ラベル用のテキストスタイル
 abstract final class GadgetTextStyles {
   static const _glow = [
-    Shadow(color: Color(0x99FFB000), blurRadius: 8),
+    Shadow(color: Color(0x99FFDE59), blurRadius: 8),
   ];
 
   /// 計器表示（英数字・記号のみ。DSEG は日本語を持たない）
   static const lcd = TextStyle(
     fontFamily: 'DSEG14',
-    color: GadgetColors.amber,
+    color: GadgetColors.accent,
     shadows: _glow,
   );
 
-  /// LCD 上の日本語テキスト
+  /// ディスプレイ上の日本語テキスト
   static const lcdJa = TextStyle(
     fontFamily: 'NotoSansJP',
-    color: GadgetColors.amber,
+    color: GadgetColors.accent,
     shadows: _glow,
   );
 
-  /// 銘板の刻印（英字ラベル）
+  /// カードの見出しラベル（英字想定）
   static const plate = TextStyle(
     color: GadgetColors.label,
     fontSize: 11,
     letterSpacing: 2,
-    fontWeight: FontWeight.w600,
+    fontWeight: FontWeight.w800,
   );
 }
 
 ThemeData buildGadgetTheme() {
-  const scheme = ColorScheme.dark(
-    primary: GadgetColors.amber,
-    onPrimary: Colors.black,
-    secondary: GadgetColors.amber,
-    onSecondary: Colors.black,
+  const scheme = ColorScheme.light(
+    primary: GadgetColors.accent,
+    onPrimary: GadgetColors.ink,
+    secondary: GadgetColors.accent,
+    onSecondary: GadgetColors.ink,
     surface: GadgetColors.chassis,
-    onSurface: Color(0xFFD5DAE0),
+    onSurface: GadgetColors.ink,
     surfaceContainerHighest: GadgetColors.panel,
-    outline: Color(0xFF4A525C),
-    outlineVariant: Color(0xFF343B43),
+    outline: GadgetColors.ink,
+    outlineVariant: Color(0xFF0AAAC6),
     error: GadgetColors.red,
-    onError: Colors.black,
+    onError: Colors.white,
   );
 
   return ThemeData(
@@ -80,74 +82,78 @@ ThemeData buildGadgetTheme() {
     scaffoldBackgroundColor: GadgetColors.chassis,
     appBarTheme: const AppBarTheme(
       backgroundColor: GadgetColors.chassis,
-      foregroundColor: Color(0xFFD5DAE0),
+      foregroundColor: Colors.white,
       centerTitle: false,
       titleTextStyle: TextStyle(
         fontFamily: 'NotoSansJP',
-        fontSize: 18,
-        fontWeight: FontWeight.w700,
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
         letterSpacing: 1,
-        color: Color(0xFFD5DAE0),
+        color: Colors.white,
       ),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: SegmentedButton.styleFrom(
-        backgroundColor: GadgetColors.bezelDark,
+        backgroundColor: GadgetColors.panel,
         foregroundColor: GadgetColors.label,
-        selectedBackgroundColor: GadgetColors.panel,
-        selectedForegroundColor: GadgetColors.amber,
-        side: const BorderSide(color: Color(0xFF343B43)),
+        selectedBackgroundColor: GadgetColors.accent,
+        selectedForegroundColor: GadgetColors.ink,
+        side: const BorderSide(color: GadgetColors.ink, width: 1.5),
         textStyle: const TextStyle(
           fontFamily: 'NotoSansJP',
           fontSize: 13,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
         ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         visualDensity: VisualDensity.compact,
       ),
     ),
     sliderTheme: const SliderThemeData(
-      activeTrackColor: GadgetColors.amber,
-      inactiveTrackColor: GadgetColors.bezelDark,
-      thumbColor: Color(0xFFB9C2CC),
-      activeTickMarkColor: Color(0x66000000),
-      inactiveTickMarkColor: Color(0xFF343B43),
-      trackHeight: 6,
+      activeTrackColor: GadgetColors.accent,
+      inactiveTrackColor: Color(0x66FFFFFF),
+      thumbColor: Colors.white,
+      activeTickMarkColor: Color(0x330B3A46),
+      inactiveTickMarkColor: Color(0x66FFFFFF),
+      trackHeight: 8,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: GadgetColors.lcdBackground,
-      labelStyle: const TextStyle(color: GadgetColors.label),
+      labelStyle: const TextStyle(color: GadgetColors.labelOnDark),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: Color(0xFF343B43)),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: GadgetColors.amber),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: GadgetColors.accent, width: 2),
       ),
       disabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: Color(0xFF2A3037)),
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFFD5DAE0),
-        side: const BorderSide(color: Color(0xFF4A525C)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        foregroundColor: GadgetColors.ink,
+        side: const BorderSide(color: GadgetColors.ink, width: 1.5),
+        textStyle: const TextStyle(
+          fontFamily: 'NotoSansJP',
+          fontWeight: FontWeight.w700,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
       style: IconButton.styleFrom(foregroundColor: GadgetColors.label),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: GadgetColors.bezelDark,
-      indicatorColor: GadgetColors.panel,
+      backgroundColor: GadgetColors.panel,
+      indicatorColor: GadgetColors.accent,
       iconTheme: WidgetStateProperty.resolveWith(
         (states) => IconThemeData(
           color: states.contains(WidgetState.selected)
-              ? GadgetColors.amber
+              ? GadgetColors.ink
               : GadgetColors.label,
         ),
       ),
@@ -155,10 +161,10 @@ ThemeData buildGadgetTheme() {
         (states) => TextStyle(
           fontFamily: 'NotoSansJP',
           fontSize: 12,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w800,
           letterSpacing: 1,
           color: states.contains(WidgetState.selected)
-              ? GadgetColors.amber
+              ? GadgetColors.ink
               : GadgetColors.label,
         ),
       ),

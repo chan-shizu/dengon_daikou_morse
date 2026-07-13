@@ -99,7 +99,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                       controller: _textController,
                       enabled: !state.isSending,
                       style: GadgetTextStyles.lcdJa.copyWith(fontSize: 16),
-                      cursorColor: GadgetColors.amber,
+                      cursorColor: GadgetColors.accent,
                       inputFormatters: [
                         _LanguageInputFormatter(
                           state.language,
@@ -375,7 +375,7 @@ class _ImagePreview extends StatelessWidget {
           child: Text(
             'フォルダまたはカメラから\n画像を選択してください',
             textAlign: TextAlign.center,
-            style: TextStyle(color: GadgetColors.amberDim),
+            style: TextStyle(color: GadgetColors.accentDim),
           ),
         ),
       );
@@ -398,8 +398,8 @@ class _ImagePreview extends StatelessWidget {
               value: state.imagePayload.isEmpty
                   ? null
                   : state.sentBits / state.imagePayload.length,
-              backgroundColor: GadgetColors.amberDim,
-              color: GadgetColors.amber,
+              backgroundColor: GadgetColors.accentDim,
+              color: GadgetColors.accent,
             ),
           ],
         ],
@@ -482,7 +482,7 @@ class _MorseResultView extends StatelessWidget {
         child: Text(
           'テキストを入力すると\nモールス符号が表示されます',
           textAlign: TextAlign.center,
-          style: TextStyle(color: GadgetColors.amberDim),
+          style: TextStyle(color: GadgetColors.accentDim),
         ),
       );
     }
@@ -518,24 +518,24 @@ class _MorseChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 送信中の文字は反転表示（アンバー地に黒文字）
+    // 送信中の文字は反転表示（イエロー地に暗色文字）
     final charStyle = GadgetTextStyles.lcdJa.copyWith(
       fontSize: 16,
-      color: isSending ? Colors.black : GadgetColors.amber,
+      color: isSending ? GadgetColors.ink : GadgetColors.accent,
       shadows: isSending ? const [] : null,
     );
     final codeStyle = GadgetTextStyles.lcd.copyWith(
       fontSize: 12,
       color: isSending
-          ? Colors.black
-          : (code != null ? GadgetColors.amber : GadgetColors.red),
+          ? GadgetColors.ink
+          : (code != null ? GadgetColors.accent : GadgetColors.red),
       shadows: isSending ? const [] : null,
     );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
-        color: isSending ? GadgetColors.amber : null,
+        color: isSending ? GadgetColors.accent : null,
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(

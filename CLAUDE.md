@@ -50,11 +50,12 @@ lib/
     gadget/                         # 無線機風の共通部品（Panel / LcdDisplay / Led / Button）
 ```
 
-### デザイン規約（無線機・トランシーバー風）
+### デザイン規約（ポップ・ステッカー風）
 
-- ダーク筐体 + アンバー発光（`GadgetColors.amber`）で統一。色は直接指定せず `GadgetColors` を使う
-- LCD表示の英数字・記号・モールス符号は DSEG14 フォント（`GadgetTextStyles.lcd`）、日本語は NotoSansJP（`.lcdJa`）
-- セクションは `GadgetPanel`（英字銘板ラベル付き）、表示エリアは `LcdDisplay`、主操作は `GadgetButton`、状態は `LedIndicator`
+- アプリアイコンと同配色のシアン背景 + 白カード + イエローアクセント（`GadgetColors.accent`）で統一。色は直接指定せず `GadgetColors` を使う
+- カード・ボタンは太い暗色アウトライン（`GadgetColors.ink`）とオフセット影（ぼかしなし `Offset(0, 4)`）でステッカー風に浮かせる。角丸は大きめ（カード18 / ボタン16 / ディスプレイ14）
+- ディスプレイ表示の英数字・記号・モールス符号は DSEG14 フォント（`GadgetTextStyles.lcd`）、日本語は NotoSansJP（`.lcdJa`）。地色は暗いティール + イエロー発光
+- セクションは `GadgetPanel`（英字ラベル付き）、表示エリアは `LcdDisplay`、主操作は `GadgetButton`、状態は `LedIndicator`
 - ゴールデンテストで DSEG を描画するには `flutter_test_config.dart` でのフォントロードが必要（設定済み）
 
 ### 実装方針
