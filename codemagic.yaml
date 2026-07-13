@@ -1,0 +1,46 @@
+workflows:
+  ios-release:
+    name: iOS Release (TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Codemagic の Team settings > Integrations > Developer Portal で
+      # App Store Connect API キーをこの名前で登録しておく
+      app_store_connect: codemagic
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.chanshizu.dengonDaikouMorse
+      flutter: 3.44.4
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Flutter パッケージ取得
+        script: flutter pub get
+      - name: コード生成（Riverpod）
+        script: dart run build_runner build --delete-conflicting-outputs
+      - name: 静的解析
+        script: flutter analyze
+      - name: ロジックテスト
+        # ゴールデンテストはCI環境のフォントレンダリング差で失敗しうるため除外し、
+        # ロジックテストのみ実行する
+        script: |
+          flutter test \
+            test/morse_encoder_test.dart \
+            test/morse_decoder_test.dart \
+            test/image_transfer_test.dart \
+            test/sound_transfer_test.dart
+      - name: 署名プロファイル適用
+        script: xcode-project use-profiles
+      - name: IPA ビルド
+        script: |
+          flutter build ipa --release \
+            --build-number=$BUILD_NUMBER \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integrations
+        submit_to_testflight: true

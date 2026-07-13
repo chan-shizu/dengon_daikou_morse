@@ -118,6 +118,16 @@ flutter test     # テスト実行
 <string>送信する画像の選択に写真ライブラリを使用します</string>
 ```
 
+### リリース（iOSのみ・Codemagic）
+
+- Bundle ID: `com.chanshizu.dengonDaikouMorse` / 表示名: 伝言代行モールス / Android はリリースしない
+- CI定義は `codemagic.yaml`（`ios-release` ワークフロー）。ビルド成功で TestFlight まで自動アップロード、App Store 審査提出は手動
+- Codemagic 側の前提: Team settings > Integrations > Developer Portal に App Store Connect API キーを **`codemagic`** という名前で登録（署名証明書・プロファイルはこのキーで自動取得）
+- Apple 側の前提: App Store Connect に上記 Bundle ID でアプリを登録
+- ビルド番号は Codemagic の `$BUILD_NUMBER` で自動採番。バージョン（`x.y.z`）は `pubspec.yaml` の `version:` を手動更新
+- CI ではゴールデンテストを実行しない（環境のフォントレンダリング差で壊れるため。ロジックテストのみ）
+- アプリアイコンは `dart run tool/generate_app_icon.dart` で全サイズ再生成できる（素材: `tool/app_icon_source.png`）
+
 ---
 
 ## ドメイン知識
@@ -206,3 +216,5 @@ flutter test     # テスト実行
 - [x] 画像送受信（4階調ディザ変換・画質選択・想定送信時間・逐次表示）
 - [x] 音（トーン）での送受信（波形合成送信・Goertzelマイク受信・光/音選択）
 - [ ] 実機2台での送受信テスト（閾値・ROI調整、音は環境ノイズ・残響の影響確認）
+- [x] iOSリリース準備（Bundle ID・表示名・アイコン・codemagic.yaml）
+- [ ] iOSリリース（Codemagic側のAPIキー登録 → TestFlight配信 → App Store審査提出）
