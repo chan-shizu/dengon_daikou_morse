@@ -30,7 +30,7 @@ class GadgetButton extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: Ink(
-        height: 56,
+        height: 48,
         decoration: BoxDecoration(
           color: face,
           borderRadius: BorderRadius.circular(16),

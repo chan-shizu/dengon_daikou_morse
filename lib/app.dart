@@ -41,6 +41,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
+        height: 72,
         onDestinationSelected: (index) {
           // 受信タブから離れたらカメラを解放する
           if (_index == 1 && index != 1) {

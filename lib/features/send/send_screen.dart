@@ -73,7 +73,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
         actions: const [_PlateBadge('TX')],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -87,14 +87,14 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                     enabled: !state.isSending,
                     onChanged: vm.setContent,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   if (state.content == SendContent.text) ...[
                     _LanguageSelector(
                       language: state.language,
                       enabled: !state.isSending,
                       onChanged: _onLanguageChanged,
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     TextField(
                       controller: _textController,
                       enabled: !state.isSending,
@@ -134,7 +134,6 @@ class _SendScreenState extends ConsumerState<SendScreen> {
                     enabled: !state.isSending,
                     onChanged: (mode) => vm.setMode(mode),
                   ),
-                  const SizedBox(height: 4),
                   if (state.mode == SendMode.sound)
                     // 音はトーン波形の一括再生なので光より大幅に速くできる
                     _SpeedSlider(

@@ -26,7 +26,7 @@ class ReceiveScreen extends ConsumerWidget {
         actions: const [_PlateBadge('RX')],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -40,7 +40,7 @@ class ReceiveScreen extends ConsumerWidget {
                     enabled: !state.isReceiving,
                     onChanged: vm.setSignal,
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
                   _SignalPreviewArea(
                     signal: state.signal,
                     isReceiving: state.isReceiving,
