@@ -3,13 +3,16 @@
 ios:
 	flutter run -d iphone
 
-ios-sim:
+ios-se-sim:
 	flutter run -d "iPhone SE"
+
+ios-16-sim:
+	flutter run -d "iPhone 16"
 
 ipad-device:
 	flutter run -d 00008030-001A40301E88C02E
 
-iPhone-se-device:
+ios-se-device:
 	flutter run -d 00008110-000C64CC2268401E
 
 android:
