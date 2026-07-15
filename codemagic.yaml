@@ -8,9 +8,12 @@ workflows:
       # App Store Connect API キーをこの名前で登録しておく
       app_store_connect: codemagic
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.chanshizu.dengonDaikouMorse
+      groups:
+        # Codemagic の App settings > Environment variables に
+        # CERTIFICATE_PRIVATE_KEY（RSA秘密鍵・secret扱い）をこのグループ名で登録しておく
+        - signing
+      vars:
+        BUNDLE_ID: com.chanshizu.dengonDaikouMorse
       flutter: 3.44.4
       xcode: latest
       cocoapods: default
@@ -30,8 +33,16 @@ workflows:
             test/morse_decoder_test.dart \
             test/image_transfer_test.dart \
             test/sound_transfer_test.dart
-      - name: 署名プロファイル適用
-        script: xcode-project use-profiles
+      - name: 署名ファイル取得・適用
+        # ios_signing の自動署名は "No matching profiles found" で失敗するため、
+        # CLI で証明書・プロファイルを明示的に取得する（なければ作成する）
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: IPA ビルド
         script: |
           flutter build ipa --release \
