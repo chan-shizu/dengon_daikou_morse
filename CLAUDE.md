@@ -123,7 +123,7 @@ flutter test     # テスト実行
 
 - Bundle ID: `com.chanshizu.dengonDaikouMorse` / 表示名: 伝言代行モールス / Android はリリースしない
 - CI定義は `codemagic.yaml`（`ios-release` ワークフロー）。ビルド成功で TestFlight まで自動アップロード、App Store 審査提出は手動
-- Codemagic 側の前提: Team settings > Integrations > Developer Portal に App Store Connect API キーを **`codemagic`** という名前で登録（署名証明書・プロファイルはこのキーで取得・作成）
+- Codemagic 側の前提: Settings > Integrations > Developer Portal に App Store Connect API キーを **`shizutify_app_store`** という名前で登録済み（署名証明書・プロファイルはこのキーで取得・作成。yaml の `integrations.app_store_connect` と名前を一致させること）
 - Codemagic 側の前提2: App settings > Environment variables に環境変数グループ **`signing`** を作り、**`CERTIFICATE_PRIVATE_KEY`**（RSA 2048 秘密鍵、Secret 扱い）を登録。`ios_signing` の自動署名は "No matching profiles found" で失敗するため、CLI（`app-store-connect fetch-signing-files --create`）で明示的に署名取得している
 - Apple 側の前提: App Store Connect に上記 Bundle ID でアプリを登録
 - ビルド番号は Codemagic の `$BUILD_NUMBER` で自動採番。バージョン（`x.y.z`）は `pubspec.yaml` の `version:` を手動更新

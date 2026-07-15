@@ -4,9 +4,9 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
-      # Codemagic の Team settings > Integrations > Developer Portal で
-      # App Store Connect API キーをこの名前で登録しておく
-      app_store_connect: codemagic
+      # Codemagic の Settings > Integrations > Developer Portal に
+      # 登録済みの App Store Connect API キーの名前
+      app_store_connect: shizutify_app_store
     environment:
       groups:
         # Codemagic の App settings > Environment variables に
