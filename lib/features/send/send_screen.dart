@@ -21,9 +21,9 @@ class SendScreen extends ConsumerStatefulWidget {
 
 // 入力が弾かれたときのアラート文言
 String _rejectedInputMessage(MorseLanguage language) => switch (language) {
-      MorseLanguage.japanese => '日本語モードでは ひらがな・カタカナ・数字・記号（. , ?）のみ入力できます',
-      MorseLanguage.english => '英語モードでは 英字・数字・記号（. , ?）のみ入力できます',
-    };
+  MorseLanguage.japanese => '日本語モードでは ひらがな・カタカナ・数字・記号（. , ?）のみ入力できます',
+  MorseLanguage.english => '英語モードでは 英字・数字・記号（. , ?）のみ入力できます',
+};
 
 String _removedBySwitchMessage(MorseLanguage language) =>
     '${language.label}モードで入力できない文字を削除しました';
@@ -41,10 +41,7 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-        ),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
       );
   }
 
@@ -74,115 +71,131 @@ class _SendScreenState extends ConsumerState<SendScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            GadgetPanel(
-              label: 'INPUT',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _ContentSelector(
-                    content: state.content,
-                    enabled: !state.isSending,
-                    onChanged: vm.setContent,
-                  ),
-                  const SizedBox(height: 6),
-                  if (state.content == SendContent.text) ...[
-                    _LanguageSelector(
-                      language: state.language,
-                      enabled: !state.isSending,
-                      onChanged: _onLanguageChanged,
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _textController,
-                      enabled: !state.isSending,
-                      style: GadgetTextStyles.lcdJa.copyWith(fontSize: 16),
-                      cursorColor: GadgetColors.accent,
-                      inputFormatters: [
-                        _LanguageInputFormatter(
-                          state.language,
-                          onRejected: () =>
-                              _showAlert(_rejectedInputMessage(state.language)),
-                        ),
-                      ],
-                      decoration: InputDecoration(
-                        labelText: '${state.language.label}テキスト',
-                        isDense: true,
+        // キーボード表示などで高さが足りないときだけスクロール可能にする
+        // （余裕があるときは Expanded がモールス表示を広げる従来のレイアウト）
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    GadgetPanel(
+                      label: 'INPUT',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _ContentSelector(
+                            content: state.content,
+                            enabled: !state.isSending,
+                            onChanged: vm.setContent,
+                          ),
+                          const SizedBox(height: 6),
+                          if (state.content == SendContent.text) ...[
+                            _LanguageSelector(
+                              language: state.language,
+                              enabled: !state.isSending,
+                              onChanged: _onLanguageChanged,
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _textController,
+                              enabled: !state.isSending,
+                              style: GadgetTextStyles.lcdJa.copyWith(
+                                fontSize: 16,
+                              ),
+                              cursorColor: GadgetColors.accent,
+                              inputFormatters: [
+                                _LanguageInputFormatter(
+                                  state.language,
+                                  onRejected: () => _showAlert(
+                                    _rejectedInputMessage(state.language),
+                                  ),
+                                ),
+                              ],
+                              decoration: InputDecoration(
+                                labelText: '${state.language.label}テキスト',
+                                isDense: true,
+                              ),
+                              onChanged: vm.updateInput,
+                            ),
+                          ] else
+                            _ImagePickerRow(
+                              enabled: !state.isSending,
+                              quality: state.imageQuality,
+                              onPick: vm.pickImage,
+                              onQualityChanged: vm.setImageQuality,
+                            ),
+                        ],
                       ),
-                      onChanged: vm.updateInput,
                     ),
-                  ] else
-                    _ImagePickerRow(
-                      enabled: !state.isSending,
-                      quality: state.imageQuality,
-                      onPick: vm.pickImage,
-                      onQualityChanged: vm.setImageQuality,
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            GadgetPanel(
-              label: 'SIGNAL / SPEED',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _ModeSelector(
-                    mode: state.mode,
-                    enabled: !state.isSending,
-                    onChanged: (mode) => vm.setMode(mode),
-                  ),
-                  if (state.mode == SendMode.sound)
-                    // 音はトーン波形の一括再生なので光より大幅に速くできる
-                    _SpeedSlider(
-                      unitMs: state.soundUnitMs,
-                      minMs: kSoundMinUnitMs,
-                      maxMs: kSoundMaxUnitMs,
-                      enabled: !state.isSending,
-                      onChanged: (ms) => vm.setSoundUnitMs(ms),
-                    )
-                  else
-                    _SpeedSlider(
-                      unitMs: state.unitMs,
-                      minMs: kMinUnitMs,
-                      maxMs: kMaxUnitMs,
-                      enabled: !state.isSending,
-                      onChanged: (ms) => vm.setUnitMs(ms),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            if (state.isSending)
-              GadgetButton(
-                label: '停止',
-                subLabel: 'STOP',
-                icon: Icons.stop,
-                color: GadgetColors.red,
-                onPressed: vm.stopSending,
-              )
-            else
-              GadgetButton(
-                label: '送信',
-                subLabel: 'TRANSMIT',
-                icon: Icons.flash_on,
-                onPressed: state.canSend ? () => vm.startSending() : null,
-              ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: state.content == SendContent.text
-                  ? LcdDisplay(
-                      child: _MorseResultView(
-                        inputText: state.inputText,
-                        morseSequence: state.morseSequence,
-                        sendingCharIndex: state.sendingCharIndex,
+                    const SizedBox(height: 10),
+                    GadgetPanel(
+                      label: 'SIGNAL / SPEED',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _ModeSelector(
+                            mode: state.mode,
+                            enabled: !state.isSending,
+                            onChanged: (mode) => vm.setMode(mode),
+                          ),
+                          if (state.mode == SendMode.sound)
+                            // 音はトーン波形の一括再生なので光より大幅に速くできる
+                            _SpeedSlider(
+                              unitMs: state.soundUnitMs,
+                              minMs: kSoundMinUnitMs,
+                              maxMs: kSoundMaxUnitMs,
+                              enabled: !state.isSending,
+                              onChanged: (ms) => vm.setSoundUnitMs(ms),
+                            )
+                          else
+                            _SpeedSlider(
+                              unitMs: state.unitMs,
+                              minMs: kMinUnitMs,
+                              maxMs: kMaxUnitMs,
+                              enabled: !state.isSending,
+                              onChanged: (ms) => vm.setUnitMs(ms),
+                            ),
+                        ],
                       ),
-                    )
-                  : _ImagePreview(state: state),
+                    ),
+                    const SizedBox(height: 10),
+                    if (state.isSending)
+                      GadgetButton(
+                        label: '停止',
+                        subLabel: 'STOP',
+                        icon: Icons.stop,
+                        color: GadgetColors.red,
+                        onPressed: vm.stopSending,
+                      )
+                    else
+                      GadgetButton(
+                        label: '送信',
+                        subLabel: 'TRANSMIT',
+                        icon: Icons.flash_on,
+                        onPressed: state.canSend
+                            ? () => vm.startSending()
+                            : null,
+                      ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: state.content == SendContent.text
+                          ? LcdDisplay(
+                              child: _MorseResultView(
+                                inputText: state.inputText,
+                                morseSequence: state.morseSequence,
+                                sendingCharIndex: state.sendingCharIndex,
+                              ),
+                            )
+                          : _ImagePreview(state: state),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -200,10 +213,7 @@ class _PlateBadge extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 16),
       child: Center(
-        child: Text(
-          text,
-          style: GadgetTextStyles.lcd.copyWith(fontSize: 18),
-        ),
+        child: Text(text, style: GadgetTextStyles.lcd.copyWith(fontSize: 18)),
       ),
     );
   }
@@ -296,8 +306,9 @@ class _ContentSelector extends StatelessWidget {
           ButtonSegment(value: c, label: Text(c.label)),
       ],
       selected: {content},
-      onSelectionChanged:
-          enabled ? (selection) => onChanged(selection.first) : null,
+      onSelectionChanged: enabled
+          ? (selection) => onChanged(selection.first)
+          : null,
     );
   }
 }
@@ -350,8 +361,9 @@ class _ImagePickerRow extends StatelessWidget {
               ),
           ],
           selected: {quality},
-          onSelectionChanged:
-              enabled ? (selection) => onQualityChanged(selection.first) : null,
+          onSelectionChanged: enabled
+              ? (selection) => onQualityChanged(selection.first)
+              : null,
         ),
       ],
     );
@@ -384,7 +396,9 @@ class _ImagePreview extends StatelessWidget {
     return LcdDisplay(
       child: Column(
         children: [
-          Expanded(child: Center(child: GrayImageView(image: image))),
+          Expanded(
+            child: Center(child: GrayImageView(image: image)),
+          ),
           const SizedBox(height: 8),
           Text(
             '${image.width}×${image.height} / ${state.imagePayload.length}ビット / '
@@ -432,8 +446,9 @@ class _LanguageSelector extends StatelessWidget {
           ButtonSegment(value: l, label: Text(l.label)),
       ],
       selected: {language},
-      onSelectionChanged:
-          enabled ? (selection) => onChanged(selection.first) : null,
+      onSelectionChanged: enabled
+          ? (selection) => onChanged(selection.first)
+          : null,
     );
   }
 }
@@ -457,8 +472,9 @@ class _ModeSelector extends StatelessWidget {
           ButtonSegment(value: m, label: Text(m.label)),
       ],
       selected: {mode},
-      onSelectionChanged:
-          enabled ? (selection) => onChanged(selection.first) : null,
+      onSelectionChanged: enabled
+          ? (selection) => onChanged(selection.first)
+          : null,
     );
   }
 }
