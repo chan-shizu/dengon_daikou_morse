@@ -1,14 +1,21 @@
 import 'package:dengon_daikou_morse/app.dart';
+import 'package:dengon_daikou_morse/features/onboarding/onboarding_screen.dart';
 import 'package:dengon_daikou_morse/features/receive/receive_screen.dart';
 import 'package:dengon_daikou_morse/features/send/send_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // iPhone 15 Pro サイズで固定
 const _kSurfaceSize = Size(393, 852);
 
-Future<void> _pumpApp(WidgetTester tester, Widget app) async {
+Future<void> _pumpApp(
+  WidgetTester tester,
+  Widget app, {
+  bool onboardingSeen = true,
+}) async {
+  SharedPreferences.setMockInitialValues({'onboarding_seen': onboardingSeen});
   await tester.binding.setSurfaceSize(_kSurfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(app);
@@ -63,6 +70,27 @@ void main() {
         find.byType(ReceiveScreen),
         matchesGoldenFile('goldens/receive_screen_idle.png'),
       );
+    });
+  });
+
+  group('OnboardingScreen golden', () {
+    testWidgets('3ページ', (tester) async {
+      await _pumpApp(
+        tester,
+        const ProviderScope(child: App()),
+        onboardingSeen: false,
+      );
+
+      for (var page = 1; page <= 3; page++) {
+        await expectLater(
+          find.byType(OnboardingScreen),
+          matchesGoldenFile('goldens/onboarding_page$page.png'),
+        );
+        if (page < 3) {
+          await tester.tap(find.text('次へ'));
+          await tester.pumpAndSettle();
+        }
+      }
     });
   });
 }

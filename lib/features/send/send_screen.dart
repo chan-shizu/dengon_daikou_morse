@@ -6,6 +6,7 @@ import '../../core/constants.dart';
 import '../../core/image/gray_image.dart';
 import '../../core/morse/morse_encoder.dart';
 import '../../theme/app_theme.dart';
+import '../onboarding/onboarding_screen.dart';
 import '../../widgets/gadget/gadget_button.dart';
 import '../../widgets/gadget/gadget_panel.dart';
 import '../../widgets/gadget/lcd_display.dart';
@@ -67,7 +68,18 @@ class _SendScreenState extends ConsumerState<SendScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('モールス送信'),
-        actions: const [_PlateBadge('TX')],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: '使い方',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const OnboardingScreen(isReplay: true),
+              ),
+            ),
+          ),
+          const _PlateBadge('TX'),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

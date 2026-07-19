@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'features/onboarding/onboarding_screen.dart';
+import 'features/onboarding/onboarding_view_model.dart';
 import 'features/receive/receive_screen.dart';
 import 'features/receive/receive_view_model.dart';
 import 'features/send/send_screen.dart';
 import 'theme/app_theme.dart';
 
-class App extends StatelessWidget {
+class App extends ConsumerWidget {
   const App({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'モールス伝言代行',
       theme: buildGadgetTheme(),
-      home: const HomeShell(),
+      home: switch (ref.watch(onboardingViewModelProvider)) {
+        AsyncData(value: false) => const OnboardingScreen(),
+        AsyncData(value: true) => const HomeShell(),
+        // フラグ読み込み中（一瞬）は背景色だけの画面
+        _ => const Scaffold(body: SizedBox.shrink()),
+      },
     );
   }
 }

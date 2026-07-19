@@ -36,6 +36,9 @@ lib/
       morse_decoder.dart            # Model: シーケンス → テキスト変換
     constants.dart                  # 定数（単位時間デフォルト値など）
   features/
+    onboarding/
+      onboarding_screen.dart        # View: 初回起動時の使い方説明（3ページ、?で再表示可）
+      onboarding_view_model.dart    # ViewModel: 表示済みフラグ（SharedPreferences）
     send/
       send_screen.dart              # View
       send_view_model.dart          # ViewModel
@@ -146,6 +149,7 @@ flutter test     # テスト実行
 | `image_picker` | 送信画像の選択（フォルダ/カメラ） | dependencies |
 | `image` | 画像の縮小・階調変換 | dependencies |
 | `record` | マイクPCMストリーム取得（音受信） | dependencies |
+| `shared_preferences` | オンボーディング表示済みフラグの永続化 | dependencies |
 | `riverpod_generator` | コード生成 | dev_dependencies |
 | `build_runner` | コード生成実行 | dev_dependencies |
 
@@ -217,6 +221,7 @@ flutter test     # テスト実行
 - [x] 通信プロトコル（開始合図・言語符号・終了符号・単位時間の自動校正）
 - [x] 画像送受信（4階調ディザ変換・画質選択・想定送信時間・逐次表示）
 - [x] 音（トーン）での送受信（波形合成送信・Goertzelマイク受信・光/音選択）
+- [x] 初回起動時オンボーディング（3ページ・スキップ可・?で再表示）
 - [ ] 実機2台での送受信テスト（閾値・ROI調整、音は環境ノイズ・残響の影響確認）
 - [x] iOSリリース準備（Bundle ID・表示名・アイコン・codemagic.yaml）
 - [ ] iOSリリース（Codemagic側のAPIキー登録 → TestFlight配信 → App Store審査提出）
